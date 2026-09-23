@@ -1,0 +1,93 @@
+name: Monitor prices
+
+on:
+  schedule:
+    # 01:00 UTC = 08:00 Asia/Bangkok, daily.
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+    inputs:
+      watch:
+        description: "Run only this watch id (blank = all)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  issues: write
+
+# Never let two runs write data/ at the same time.
+concurrency:
+  group: monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          pip install pytest
+          python -m pytest tests -q
+
+      - name: Scrape listings
+        id: scrape
+        run: |
+          python -m scraper.main \
+            --config config/watchlist.yml \
+            --data data \
+            ${{ github.event.inputs.watch && format('--watch {0}', github.event.inputs.watch) || '' }}
+
+      - name: Commit updated data
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --staged --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No data changes."
+          else
+            git commit -m "data: monitor run $(date -u +%Y-%m-%d)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open an issue for new alerts
+        if: steps.scrape.outputs.alert_count != '0' && steps.scrape.outputs.alert_count != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "Price alerts — $(date -u +%Y-%m-%d) (${{ steps.scrape.outputs.alert_count }})" \
+            --body-file data/latest_alerts.md \
+            --label price-alert
+        continue-on-error: true
+
+      - name: Send webhook
+        if: steps.scrape.outputs.alert_count != '0' && steps.scrape.outputs.alert_count != ''
+        env:
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+        run: python scripts/notify_webhook.py data/latest_alerts.md
+
+      - name: Summary
+        run: |
+          {
+            echo "### Monitor run"
+            echo ""
+            echo "- Alerts: ${{ steps.scrape.outputs.alert_count || '0' }}"
+            echo "- Data committed: ${{ steps.commit.outputs.changed }}"
+            echo ""
+            cat data/latest_alerts.md
+          } >> "$GITHUB_STEP_SUMMARY"

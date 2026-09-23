@@ -1,0 +1,38 @@
+{
+ "generated_at": "2026-09-23T15:27:15+00:00",
+ "watches": [
+  {
+   "id": "ideo-mobi-sukhumvit-eastgate-1br",
+   "project": "Ideo Mobi Sukhumvit Eastgate",
+   "room_type": "1 bed, 20–40 sqm",
+   "deal": "sale",
+   "listings": 27,
+   "median_price": 3000000,
+   "median_ppsqm": 102500,
+   "bootstrap": false,
+   "sources": [
+    {
+     "source": "ddproperty",
+     "status": "ok",
+     "detail": "",
+     "pages_fetched": 2,
+     "listings_found": 23
+    },
+    {
+     "source": "livinginsider",
+     "status": "ok",
+     "detail": "",
+     "pages_fetched": 46,
+     "listings_found": 4
+    },
+    {
+     "source": "hipflat",
+     "status": "disabled",
+     "detail": "Hipflat answers every non-browser request with HTTP 401, robots.txt included. The only user agent it serves is Googlebot, and this project will not impersonate a search crawler to get around a block.",
+     "pages_fetched": 0,
+     "listings_found": 0
+    }
+   ]
+  }
+ ]
+}

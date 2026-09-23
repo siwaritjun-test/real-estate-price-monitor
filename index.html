@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Condo price monitor</title>
+<meta name="description" content="Asking-price history for tracked condo projects and room types.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🏢</text></svg>">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<header class="page">
+  <div class="wrap">
+    <h1>Condo price monitor</h1>
+    <p id="subtitle">Asking prices for a project and room type, tracked daily across listing sites.</p>
+    <div class="controls">
+      <label class="field">
+        Watch
+        <select id="watch-select" aria-label="Tracked project and room type"></select>
+      </label>
+      <label class="field">
+        Range
+        <select id="range-select" aria-label="Time range">
+          <option value="30">Last 30 days</option>
+          <option value="90" selected>Last 90 days</option>
+          <option value="365">Last year</option>
+          <option value="0">All time</option>
+        </select>
+      </label>
+      <button id="theme-toggle" type="button" aria-pressed="false">Dark mode</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap" id="main">
+
+  <section aria-labelledby="h-summary">
+    <h2 id="h-summary">Right now</h2>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <section aria-labelledby="h-trend">
+    <h2 id="h-trend">Trend</h2>
+
+    <div class="card">
+      <h3>Median asking price per sqm</h3>
+      <p class="caption">One line per listing site. Where the lines agree, the two sites are seeing the same market.</p>
+      <div class="legend" id="legend-ppsqm"></div>
+      <div class="chart-scroll"><svg class="chart" id="chart-ppsqm" role="img" aria-label="Median asking price per square metre over time"></svg></div>
+    </div>
+
+    <div class="card">
+      <h3>Units on the market</h3>
+      <p class="caption">How many matching units were listed on each run. A sharp fall usually means units sold or were delisted.</p>
+      <div class="legend" id="legend-count"></div>
+      <div class="chart-scroll"><svg class="chart" id="chart-count" role="img" aria-label="Number of matching listings over time"></svg></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-alerts">
+    <h2 id="h-alerts">Alerts</h2>
+    <ul class="alerts" id="alerts"></ul>
+  </section>
+
+  <section aria-labelledby="h-listings">
+    <h2 id="h-listings">Listings <span id="listing-count" class="visually-hidden"></span></h2>
+    <div class="table-scroll">
+      <table id="listings">
+        <thead>
+          <tr>
+            <th data-sort="price" aria-sort="ascending">Asking price</th>
+            <th data-sort="price_per_sqm">฿/sqm</th>
+            <th data-sort="area_sqm">Size</th>
+            <th data-sort="bedrooms">Bed</th>
+            <th data-sort="floor">Floor</th>
+            <th data-sort="change">Change</th>
+            <th data-sort="first_seen">First seen</th>
+            <th data-sort="source">Source</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-sources">
+    <h2 id="h-sources">Source health</h2>
+    <div class="status" id="sources"></div>
+  </section>
+
+</main>
+
+<footer class="page wrap">
+  <p id="footer-note">Asking prices only — not transaction prices. Figures are scraped from public listing pages and may lag or repeat duplicate listings.</p>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

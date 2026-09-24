@@ -18,3 +18,10 @@ def test_implausible_catches_absurd_area():
 
 def test_normalise_collapses_separators():
     assert normalise("IDEO-MOBI  Sukhumvit_81") == "ideo mobi sukhumvit 81"
+
+
+def test_room_bucket():
+    from scraper.models import room_bucket
+    assert [room_bucket(b) for b in (None, 0, 1, 2, 3, 5)] == [
+        "unknown", "studio", "1br", "2br", "3br+", "3br+",
+    ]

@@ -1,4 +1,4 @@
-# What to track. One entry per (project x room type) you care about.
+# What to track. One entry per condo project.
 #
 # The `url` under each source is a search or project page you can open in a
 # browser yourself -- copy it from the site with the filters you want. The
@@ -19,7 +19,9 @@ defaults:
     alert_price_drop: true
 
 watches:
-  - id: ideo-mobi-sukhumvit-eastgate-1br
+  # One entry per project. Every unit is collected; the dashboard splits them
+  # by bedroom count and size, so there is no need for one watch per room type.
+  - id: ideo-mobi-sukhumvit-eastgate
     project: Ideo Mobi Sukhumvit Eastgate
     deal: sale
 
@@ -28,12 +30,16 @@ watches:
     match:
       - Ideo Mobi Sukhumvit Eastgate
 
-    # The room type. Omit a field to leave it unconstrained.
-    # (bedrooms: 0 means studio.)
-    room_type:
-      bedrooms: 1
-      min_sqm: 20
-      max_sqm: 40
+    # Optional: `room_type:` here would drop other units before they are stored.
+    # Left out on purpose so every room type gets a history.
+
+    alerts:
+      # Alert only on the unit shape you are shopping for. Delete this block
+      # to be alerted on every unit in the project. (bedrooms: 0 means studio.)
+      room_type:
+        bedrooms: 1
+        min_sqm: 20
+        max_sqm: 40
 
     sources:
       ddproperty:

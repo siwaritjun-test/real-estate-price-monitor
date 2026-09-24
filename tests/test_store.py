@@ -75,3 +75,18 @@ def test_alerts_log_is_capped_and_newest_first(tmp_path):
     store.append_alerts([{"type": "new_listing", "n": 1}])
     stored = store.append_alerts([{"type": "price_drop", "n": 2}])
     assert [a["n"] for a in stored] == [2, 1]
+
+
+def test_summarise_splits_by_room_bucket():
+    rows = [
+        Listing("ddproperty", "1", "u", "t", price=2_000_000, area_sqm=22.0, bedrooms=1).to_dict(),
+        Listing("ddproperty", "2", "u", "t", price=2_400_000, area_sqm=26.0, bedrooms=1).to_dict(),
+        Listing("ddproperty", "3", "u", "t", price=4_000_000, area_sqm=45.0, bedrooms=2).to_dict(),
+        Listing("ddproperty", "4", "u", "t", price=1_500_000, area_sqm=21.0, bedrooms=0).to_dict(),
+    ]
+    point = summarise(rows, "2026-09-01")
+    assert point["listings"] == 4
+    assert list(point["by_room"]) == ["studio", "1br", "2br"]
+    assert point["by_room"]["1br"]["listings"] == 2
+    assert point["by_room"]["1br"]["median_price"] == 2_200_000
+    assert point["by_room"]["2br"]["by_source"]["ddproperty"]["median_price"] == 4_000_000

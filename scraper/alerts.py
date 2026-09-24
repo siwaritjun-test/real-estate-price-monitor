@@ -5,15 +5,21 @@ from __future__ import annotations
 from typing import Any
 
 from .config import Watch
-from .models import Listing
+from .models import ROOM_LABELS, Listing, room_bucket
 from .store import utc_now
+
+
+def _describe_unit(listing: Listing) -> str:
+    label = ROOM_LABELS[room_bucket(listing.bedrooms)]
+    return f"{label}, {listing.area_sqm:g} sqm" if listing.area_sqm else label
 
 
 def _base(watch: Watch, listing: Listing, run_date: str) -> dict[str, Any]:
     return {
         "watch_id": watch.id,
         "project": watch.project,
-        "room_type": watch.room_type.describe(),
+        "room": room_bucket(listing.bedrooms),
+        "room_type": _describe_unit(listing),
         "source": listing.source,
         "listing_id": listing.listing_id,
         "title": listing.title,
@@ -43,6 +49,8 @@ def detect(
     alerts: list[dict[str, Any]] = []
 
     for listing in listings:
+        if not rules.covers(listing):
+            continue
         old = previous.get(listing.key)
 
         if old is None:

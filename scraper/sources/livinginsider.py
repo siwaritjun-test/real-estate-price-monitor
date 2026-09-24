@@ -46,6 +46,13 @@ FIELD_PATTERNS = {
     # "No of floors : 25" cannot win over "Floor : 23".
     "floor": re.compile(rf"(?mi)^{H}Floor{H}:{H}(\d+)"),
 }
+# Newer detail pages drop the "Listing ID" block for a "Property information"
+# section where each label sits on its own line with the value on the next:
+#   Floor Size / 22 sq.m. / Floor / 11-20 / Bedrooms / Studio Room / Bathrooms / 1
+PROPERTY_INFO_RE = re.compile(r"^Property information\s*$", re.M)
+PROPERTY_INFO_CHARS = 400
+PROPERTY_INFO_LABELS = {"Floor Size", "Floor", "Bedrooms", "Bathrooms"}
+LEADING_NUMBER_RE = re.compile(r"^([\d,.]+)")
 # Fallback for the rendered price chip, e.g. "฿ 2,490,000".
 PRICE_CHIP_RE = re.compile(rf"฿{H}([\d,]{{7,}})")
 
@@ -57,6 +64,33 @@ def _to_number(text: str | None) -> float | None:
         return float(text.replace(",", ""))
     except ValueError:
         return None
+
+
+def _property_info(text: str) -> dict[str, str | None]:
+    """Read the newer label-per-line spec section into the FIELD_PATTERNS keys."""
+    anchor = PROPERTY_INFO_RE.search(text)
+    if not anchor:
+        return {}
+    lines = [ln.strip() for ln in text[anchor.end() : anchor.end() + PROPERTY_INFO_CHARS].splitlines()]
+    lines = [ln for ln in lines if ln]
+    raw = {
+        label: lines[i + 1]
+        for i, label in enumerate(lines[:-1])
+        if label in PROPERTY_INFO_LABELS and lines[i + 1] not in PROPERTY_INFO_LABELS
+    }
+
+    def leading(label: str) -> str | None:
+        m = LEADING_NUMBER_RE.match(raw.get(label, ""))
+        return m.group(1) if m else None
+
+    bedrooms = raw.get("Bedrooms", "")
+    return {
+        "area_sqm": leading("Floor Size"),
+        "bedrooms": "0" if bedrooms.lower().startswith("studio") else leading("Bedrooms"),
+        "bathrooms": leading("Bathrooms"),
+        # "11-20" is a band, not a floor; only a plain number is kept.
+        "floor": raw.get("Floor") if raw.get("Floor", "").isdigit() else None,
+    }
 
 
 def _absolute(href: str) -> str:
@@ -142,6 +176,8 @@ class LivingInsider(Source):
         for field, pattern in FIELD_PATTERNS.items():
             match = pattern.search(block)
             values[field] = match.group(1) if match else None
+        if not anchor:
+            values.update({k: v for k, v in _property_info(text).items() if v is not None})
 
         price = _to_number(values["price"])
         if price is None:
@@ -164,7 +200,7 @@ class LivingInsider(Source):
             deal=watch.deal,
             price=int(price) if price else None,
             area_sqm=_to_number(values["area_sqm"]),
-            bedrooms=int(bedrooms) if bedrooms else None,
+            bedrooms=int(bedrooms) if bedrooms is not None else None,
             bathrooms=int(values["bathrooms"]) if values["bathrooms"] else None,
             floor=int(values["floor"]) if values["floor"] else None,
             address=None,

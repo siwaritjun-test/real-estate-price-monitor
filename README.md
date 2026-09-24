@@ -1,6 +1,6 @@
 # Condo price monitor
 
-Tracks the **asking price of a specific condo project and room type** across Thai
+Tracks the **asking prices of condo projects, split by room type and size,** across Thai
 listing sites, keeps a daily price history in the repo, alerts on new listings and
 price drops, and publishes a dashboard to GitHub Pages.
 
@@ -12,8 +12,8 @@ actually being asked for this month, and has anything been cut?"*
 ## What it does
 
 1. **Scrapes** each configured source for the project you are watching.
-2. **Filters** to your room type (bedrooms, size range) using one shared rule set,
-   so every source is measured the same way.
+2. **Filters** to the project with one shared name-matching rule set, so every
+   source is measured the same way, and buckets each unit by bedroom count.
 3. **Diffs** against the previous run to find new listings and price drops.
 4. **Writes** a snapshot, a daily history point, and an alert log into `data/`.
 5. **Notifies** by opening a GitHub issue (and optionally a Slack/Discord webhook).
@@ -55,7 +55,7 @@ python -m http.server 8000
 Useful flags:
 
 ```bash
-python -m scraper.main --watch ideo-mobi-sukhumvit-eastgate-1br   # one watch only
+python -m scraper.main --watch ideo-mobi-sukhumvit-eastgate       # one watch only
 python -m scraper.main --dry-run                                  # fetch, write nothing
 python -m scraper.main -v                                         # debug logging
 ```
@@ -64,11 +64,14 @@ python -m scraper.main -v                                         # debug loggin
 
 ## Configuring a watch
 
-Everything lives in `config/watchlist.yml`. One entry per *project × room type*.
+Everything lives in `config/watchlist.yml`. **One entry per project.** Every unit
+in the project is collected; the dashboard then lets you pick the room type
+(studio / 1 / 2 / 3+ bedrooms) and a size range separately, and the history is
+stored per bedroom bucket so each room type gets its own trend line.
 
 ```yaml
 watches:
-  - id: ideo-mobi-sukhumvit-eastgate-1br    # also the data filename
+  - id: ideo-mobi-sukhumvit-eastgate         # also the data filename
     project: Ideo Mobi Sukhumvit Eastgate
     deal: sale                               # sale | rent
 
@@ -77,10 +80,11 @@ watches:
     exclude:                                 # ...and none of these
       - Eastgate Phase 2
 
-    room_type:                               # omit a field to leave it free
-      bedrooms: 1                            # 0 means studio
-      min_sqm: 20
-      max_sqm: 40
+    alerts:
+      room_type:                             # alert only on this unit shape;
+        bedrooms: 1                          # delete the block to alert on all
+        min_sqm: 20                          # (0 bedrooms means studio)
+        max_sqm: 40
 
     sources:
       ddproperty:
@@ -90,6 +94,12 @@ watches:
         url: https://www.livinginsider.com/en/project/condo-ideo-mobi-sukhumvit-eastgate-condo-buysell
         max_listings: 60
 ```
+
+A top-level `room_type:` (same fields) is still accepted and drops non-matching
+units before they are stored — use it only if you never want to see other units.
+
+To add a project, copy the entry, change `id`, `project`, `match` and the two
+source URLs. It appears in the dashboard's project picker after the next run.
 
 **Finding the URLs.** Each `url` is a page you can open yourself — copy it from the
 site with whatever filters you want:
@@ -142,7 +152,7 @@ Delivery:
 ## Deploying
 
 1. Push the repo to GitHub.
-2. **Settings → Pages → Source: Deploy from a branch**, branch `main`, folder `/`
+2. **Settings → Pages → Source: Deploy from a branch**, branch `master`, folder `/`
    (root). The dashboard is plain static files, so a committed data update *is* a
    site update.
 3. **Settings → Actions → General → Workflow permissions: Read and write**, so the
@@ -162,7 +172,7 @@ data/
 ├── alerts.json                   rolling alert log, newest first (max 500)
 ├── latest_alerts.md              this run's alerts, used as the issue body
 ├── snapshots/<watch-id>.json     current listings + per-source health
-└── history/<watch-id>.json       one aggregate point per day (max ~2 years)
+└── history/<watch-id>.json       one point per day, overall + per bedroom bucket (max ~2 years)
 ```
 
 Each snapshot row keeps `first_seen`, `first_price`, `previous_price` and a

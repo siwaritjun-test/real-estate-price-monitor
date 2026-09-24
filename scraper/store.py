@@ -9,7 +9,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from .models import Listing
+from .models import ROOM_BUCKETS, Listing, room_bucket
 
 HISTORY_LIMIT = 730  # roughly two years of daily points
 ALERT_LIMIT = 500
@@ -142,8 +142,24 @@ class Store:
 
 
 def summarise(records: Iterable[dict[str, Any]], run_date: str) -> dict[str, Any]:
-    """Build one daily history point from the current set of listings."""
+    """Build one daily history point from the current set of listings.
+
+    The top level covers every unit in the project; ``by_room`` repeats the same
+    figures per bedroom bucket so the dashboard can chart one room type alone.
+    """
     rows = list(records)
+    point = {"date": run_date, **_aggregate(rows)}
+
+    rooms: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        rooms.setdefault(row.get("room") or room_bucket(row.get("bedrooms")), []).append(row)
+    point["by_room"] = {
+        name: _aggregate(rooms[name]) for name in ROOM_BUCKETS if name in rooms
+    }
+    return point
+
+
+def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
     prices = [r["price"] for r in rows if r.get("price")]
     ppsqm = [r["price_per_sqm"] for r in rows if r.get("price_per_sqm")]
 
@@ -156,7 +172,6 @@ def summarise(records: Iterable[dict[str, Any]], run_date: str) -> dict[str, Any
             bucket["ppsqm"].append(row["price_per_sqm"])
 
     return {
-        "date": run_date,
         "listings": len(rows),
         "priced_listings": len(prices),
         "median_price": _median(prices),

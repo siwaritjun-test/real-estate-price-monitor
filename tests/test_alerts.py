@@ -68,3 +68,16 @@ def test_markdown_renders_both_sections():
 
 def test_markdown_handles_no_alerts():
     assert format_markdown([]) == "No new alerts."
+
+
+def test_alert_room_type_limits_alerts_but_not_collection():
+    watch = Watch(
+        id="w", project="p", match=["Eastgate"],
+        alerts=AlertRules(room_type=RoomType(bedrooms=1, max_sqm=40)),
+    )
+    one_bed = Listing("ddproperty", "1", "u1", "Eastgate", price=2_000_000, area_sqm=22.0, bedrooms=1)
+    two_bed = Listing("ddproperty", "2", "u2", "Eastgate", price=4_000_000, area_sqm=45.0, bedrooms=2)
+    alerts = detect(watch, previous(1, "old"), [one_bed, two_bed], run_date="d", bootstrap=False)
+    assert [a["listing_id"] for a in alerts] == ["1"]
+    assert alerts[0]["room"] == "1br"
+    assert alerts[0]["room_type"] == "1 bed, 22 sqm"

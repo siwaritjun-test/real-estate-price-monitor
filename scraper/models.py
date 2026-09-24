@@ -18,6 +18,29 @@ def normalise(text: str | None) -> str:
     return re.sub(r"[^a-z0-9฀-๿]+", " ", text.lower()).strip()
 
 
+# Bedroom buckets the history is split by, in display order. The dashboard
+# filters on these keys, so they are part of the data format.
+ROOM_BUCKETS = ("studio", "1br", "2br", "3br+", "unknown")
+ROOM_LABELS = {
+    "studio": "Studio",
+    "1br": "1 bed",
+    "2br": "2 bed",
+    "3br+": "3+ bed",
+    "unknown": "Unknown beds",
+}
+
+
+def room_bucket(bedrooms: int | None) -> str:
+    """Map a bedroom count to its history bucket (0 means studio)."""
+    if bedrooms is None:
+        return "unknown"
+    if bedrooms <= 0:
+        return "studio"
+    if bedrooms >= 3:
+        return "3br+"
+    return f"{bedrooms}br"
+
+
 @dataclass
 class Listing:
     """One unit on the market, as seen by one source at one point in time."""
@@ -66,4 +89,5 @@ class Listing:
         d = asdict(self)
         d["key"] = self.key
         d["price_per_sqm"] = self.price_per_sqm
+        d["room"] = room_bucket(self.bedrooms)
         return d

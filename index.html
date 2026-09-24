@@ -1,98 +1,143 @@
 <!doctype html>
-<html lang="en">
+<html lang="th">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Condo price monitor</title>
-<meta name="description" content="Asking-price history for tracked condo projects and room types.">
+<title>ราคาคอนโด</title>
+<meta name="description" content="ติดตามราคาประกาศขายคอนโดรายวัน แยกตามโครงการ ประเภทห้อง และขนาด">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🏢</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="assets/styles.css">
+<script>
+  // Apply a saved theme before first paint so there is no flash.
+  try { var t = localStorage.getItem("theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+</script>
 </head>
 <body>
 
-<header class="page">
-  <div class="wrap">
-    <h1>Condo price monitor</h1>
-    <p id="subtitle">Asking prices for a project and room type, tracked daily across listing sites.</p>
-    <div class="controls">
-      <label class="field">
-        Watch
-        <select id="watch-select" aria-label="Tracked project and room type"></select>
-      </label>
-      <label class="field">
-        Range
-        <select id="range-select" aria-label="Time range">
-          <option value="30">Last 30 days</option>
-          <option value="90" selected>Last 90 days</option>
-          <option value="365">Last year</option>
-          <option value="0">All time</option>
-        </select>
-      </label>
-      <button id="theme-toggle" type="button" aria-pressed="false">Dark mode</button>
+<header class="hero">
+  <div class="wrap hero-inner">
+    <div>
+      <p class="eyebrow">ติดตามราคาประกาศขายคอนโด</p>
+      <h1 id="project-name">กำลังโหลด…</h1>
+      <p class="hero-meta" id="hero-meta"></p>
     </div>
+    <button id="theme-toggle" class="icon-btn" type="button" aria-label="สลับโหมดมืด">
+      <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></svg>
+      <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    </button>
   </div>
 </header>
 
+<nav class="filters" aria-label="ตัวกรอง">
+  <div class="wrap filters-inner">
+    <label class="filter">
+      <span class="filter-label">โครงการ</span>
+      <span class="select-wrap"><select id="project-select"></select></span>
+    </label>
+
+    <div class="filter">
+      <span class="filter-label" id="room-label">ประเภทห้อง</span>
+      <div class="chips" id="room-chips" role="radiogroup" aria-labelledby="room-label"></div>
+    </div>
+
+    <div class="filter filter-size">
+      <span class="filter-label">ขนาด <b id="size-readout"></b></span>
+      <div class="range" id="size-range">
+        <div class="range-track"><div class="range-fill" id="size-fill"></div></div>
+        <input type="range" id="size-min" aria-label="ขนาดต่ำสุด (ตร.ม.)">
+        <input type="range" id="size-max" aria-label="ขนาดสูงสุด (ตร.ม.)">
+      </div>
+      <button type="button" class="link-btn" id="size-reset" hidden>ล้าง</button>
+    </div>
+  </div>
+</nav>
+
 <main class="wrap" id="main">
 
-  <section aria-labelledby="h-summary">
-    <h2 id="h-summary">Right now</h2>
-    <div class="tiles" id="tiles"></div>
-  </section>
+  <section class="tiles" id="tiles" aria-label="สรุปตอนนี้"></section>
 
-  <section aria-labelledby="h-trend">
-    <h2 id="h-trend">Trend</h2>
-
-    <div class="card">
-      <h3>Median asking price per sqm</h3>
-      <p class="caption">One line per listing site. Where the lines agree, the two sites are seeing the same market.</p>
-      <div class="legend" id="legend-ppsqm"></div>
-      <div class="chart-scroll"><svg class="chart" id="chart-ppsqm" role="img" aria-label="Median asking price per square metre over time"></svg></div>
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>ราคาเทียบขนาดห้อง</h2>
+        <p class="caption">1 จุด = 1 ประกาศ · <span class="ref-key"></span> เส้นประคือราคากลางต่อ ตร.ม. — จุดที่อยู่<b>ใต้เส้น</b>ถูกกว่าราคากลาง · คลิกจุดเพื่อเปิดประกาศ</p>
+      </div>
+      <div class="legend" id="legend-scatter"></div>
     </div>
+    <div class="chart-scroll"><svg class="chart" id="chart-scatter" role="img" aria-label="ราคาประกาศเทียบขนาดห้อง แยกตามเว็บไซต์"></svg></div>
+  </section>
 
-    <div class="card">
-      <h3>Units on the market</h3>
-      <p class="caption">How many matching units were listed on each run. A sharp fall usually means units sold or were delisted.</p>
-      <div class="legend" id="legend-count"></div>
-      <div class="chart-scroll"><svg class="chart" id="chart-count" role="img" aria-label="Number of matching listings over time"></svg></div>
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>แนวโน้มราคากลางต่อ ตร.ม.</h2>
+        <p class="caption" id="trend-caption">เส้นละ 1 เว็บไซต์ ถ้าสองเส้นใกล้กัน แปลว่าทั้งสองเว็บเห็นตลาดเดียวกัน</p>
+      </div>
+      <div class="seg" id="range-seg" role="radiogroup" aria-label="ช่วงเวลา">
+        <button type="button" data-days="30" role="radio">30 วัน</button>
+        <button type="button" data-days="90" role="radio">90 วัน</button>
+        <button type="button" data-days="365" role="radio">1 ปี</button>
+        <button type="button" data-days="0" role="radio">ทั้งหมด</button>
+      </div>
     </div>
+    <div class="legend" id="legend-ppsqm"></div>
+    <div class="chart-scroll"><svg class="chart" id="chart-ppsqm" role="img" aria-label="ราคากลางต่อตารางเมตรตามเวลา"></svg></div>
+    <h3 class="sub-h" id="count-h">จำนวนห้องที่ประกาศขาย</h3>
+    <div class="chart-scroll"><svg class="chart" id="chart-count" role="img" aria-label="จำนวนประกาศตามเวลา"></svg></div>
   </section>
 
-  <section aria-labelledby="h-alerts">
-    <h2 id="h-alerts">Alerts</h2>
-    <ul class="alerts" id="alerts"></ul>
-  </section>
+  <div class="two-col">
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>แจ้งเตือนล่าสุด</h2>
+          <p class="caption" id="alert-scope"></p>
+        </div>
+      </div>
+      <ul class="alerts" id="alerts"></ul>
+    </section>
 
-  <section aria-labelledby="h-listings">
-    <h2 id="h-listings">Listings <span id="listing-count" class="visually-hidden"></span></h2>
+    <section class="card">
+      <div class="card-head"><div><h2>แหล่งข้อมูล</h2><p class="caption">สถานะการดึงข้อมูลรอบล่าสุด</p></div></div>
+      <ul class="sources" id="sources"></ul>
+    </section>
+  </div>
+
+  <section class="card card-flush">
+    <div class="card-head pad">
+      <div>
+        <h2>ประกาศทั้งหมด <span class="count" id="listing-count"></span></h2>
+        <p class="caption">กดหัวตารางเพื่อเรียง · “เทียบราคากลาง” คือราคาต่อ ตร.ม. ของห้องนั้นเทียบกับราคากลางของห้องที่เลือกอยู่</p>
+      </div>
+    </div>
     <div class="table-scroll">
       <table id="listings">
         <thead>
           <tr>
-            <th data-sort="price" aria-sort="ascending">Asking price</th>
-            <th data-sort="price_per_sqm">฿/sqm</th>
-            <th data-sort="area_sqm">Size</th>
-            <th data-sort="bedrooms">Bed</th>
-            <th data-sort="floor">Floor</th>
-            <th data-sort="change">Change</th>
-            <th data-sort="first_seen">First seen</th>
-            <th data-sort="source">Source</th>
+            <th data-sort="price" aria-sort="ascending" class="num">ราคา</th>
+            <th data-sort="price_per_sqm" class="num">฿/ตร.ม.</th>
+            <th data-sort="vs" class="num">เทียบราคากลาง</th>
+            <th data-sort="area_sqm" class="num">ขนาด</th>
+            <th data-sort="bedrooms">ห้อง</th>
+            <th data-sort="floor" class="num">ชั้น</th>
+            <th data-sort="change" class="num">ปรับราคา</th>
+            <th data-sort="first_seen">พบครั้งแรก</th>
+            <th data-sort="source">เว็บ</th>
           </tr>
         </thead>
         <tbody></tbody>
       </table>
     </div>
-  </section>
-
-  <section aria-labelledby="h-sources">
-    <h2 id="h-sources">Source health</h2>
-    <div class="status" id="sources"></div>
+    <div class="more-row"><button type="button" class="more-btn" id="show-all" hidden></button></div>
   </section>
 
 </main>
 
-<footer class="page wrap">
-  <p id="footer-note">Asking prices only — not transaction prices. Figures are scraped from public listing pages and may lag or repeat duplicate listings.</p>
+<footer class="wrap foot">
+  <p id="footer-note">ราคาที่แสดงคือราคาประกาศขาย ไม่ใช่ราคาซื้อขายจริง · ห้องเดียวกันที่ลงหลายเว็บจะนับซ้ำ</p>
 </footer>
 
 <script src="assets/app.js"></script>

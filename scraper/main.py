@@ -147,6 +147,11 @@ def run(config_path: Path, data_dir: Path, only: list[str] | None, dry_run: bool
                 "listings": point["listings"],
                 "median_price": point["median_price"],
                 "median_ppsqm": point["median_ppsqm"],
+                "rooms": {name: agg["listings"] for name, agg in point["by_room"].items()},
+                # The unit shape alerts fire for; null means every unit.
+                "alert_room_type": (
+                    vars(watch.alerts.room_type) if watch.alerts.room_type else None
+                ),
                 "bootstrap": bootstrap,
                 "sources": [r.to_dict() for r in results],
             }

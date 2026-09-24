@@ -52,11 +52,20 @@ class AlertRules:
     min_drop_thb: int = 20_000
     alert_new: bool = True
     alert_price_drop: bool = True
+    # Only alert on units of this shape; None alerts on every unit tracked.
+    room_type: RoomType | None = None
+
+    def covers(self, listing: Listing) -> bool:
+        return self.room_type is None or self.room_type.matches(listing)
 
 
 @dataclass
 class Watch:
-    """One project + room type tracked across one or more sources."""
+    """One project tracked across one or more sources.
+
+    ``room_type`` narrows what is collected at all. Leave it empty to keep every
+    unit in the project, so the dashboard can split the history by bedroom count.
+    """
 
     id: str
     project: str
@@ -109,6 +118,8 @@ def load_watchlist(path: str | Path) -> list[Watch]:
         seen.add(wid)
 
         alert_cfg = {**(defaults.get("alerts") or {}), **(entry.get("alerts") or {})}
+        if alert_cfg.get("room_type"):
+            alert_cfg["room_type"] = RoomType(**alert_cfg["room_type"])
         watches.append(
             Watch(
                 id=wid,

@@ -38,3 +38,11 @@ def test_shipped_watchlist_parses():
     watches = load_watchlist("config/watchlist.yml")
     assert watches
     assert "hipflat" not in watches[0].enabled_sources()
+
+
+def test_shipped_watchlist_keeps_every_unit_but_alerts_on_one_bed():
+    from scraper.config import load_watchlist
+    watch = load_watchlist("config/watchlist.yml")[0]
+    assert watch.room_type.matches(listing(bedrooms=2, area_sqm=60.0))
+    assert watch.alerts.covers(listing(bedrooms=1, area_sqm=30.0))
+    assert not watch.alerts.covers(listing(bedrooms=2, area_sqm=60.0))

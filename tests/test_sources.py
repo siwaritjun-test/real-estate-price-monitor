@@ -154,3 +154,17 @@ def test_every_source_skips_cleanly_without_a_url(source_cls):
     result = source_cls().collect(WATCH, {}, FakeFetcher({}))
     assert result.status == "skipped"
     assert result.listings == []
+
+
+def test_livinginsider_reads_the_newer_property_information_layout():
+    """Studio pages use a label-per-line layout with no 'Listing ID' block."""
+    listing = LivingInsider()._parse_detail(
+        fixture("livinginsider_detail_v2.html"),
+        "https://www.livinginsider.com/en/detail/condo-for-sale-condo-ideo-mobi-sukhumvit-eastgate-studio-3208179",
+        WATCH,
+    )
+    assert listing.price == 2_400_000
+    assert listing.area_sqm == 22.0
+    assert listing.bedrooms == 0, "'Studio Room' means studio"
+    assert listing.bathrooms == 1
+    assert listing.floor is None, "'11-20' is a band, not a floor"

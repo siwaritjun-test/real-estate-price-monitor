@@ -122,6 +122,9 @@ class Store:
         return merged
 
     # -- history -------------------------------------------------------------
+    def load_history(self, watch_id: str) -> list[dict[str, Any]]:
+        return _read_json(self.history_path(watch_id), {}).get("points", [])
+
     def append_history(self, watch_id: str, point: dict[str, Any]) -> None:
         """Add today's aggregate, replacing an earlier point from the same day."""
         data = _read_json(self.history_path(watch_id), {"watch_id": watch_id, "points": []})

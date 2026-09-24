@@ -67,6 +67,11 @@
       <div class="chips" id="room-chips" role="radiogroup" aria-labelledby="room-label"></div>
     </div>
 
+    <div class="filter market-only">
+      <span class="filter-label" id="period-label">เทียบย้อนหลัง</span>
+      <div class="seg seg-lg" id="period-seg" role="radiogroup" aria-labelledby="period-label"></div>
+    </div>
+
     <div class="filter filter-size project-only">
       <span class="filter-label">ขนาด <b id="size-readout"></b></span>
       <div class="range" id="size-range">
@@ -94,11 +99,27 @@
     <div class="pinned" id="pinned"></div>
   </section>
 
+  <section class="card" id="market-compare">
+    <div class="card-head">
+      <div>
+        <h2 id="mc-title">เทียบย้อนหลัง</h2>
+        <p class="caption" id="mc-caption"></p>
+      </div>
+    </div>
+    <div class="compare-stats" id="mc-stats"></div>
+    <div class="legend" id="legend-market"></div>
+    <div class="chart-scroll"><svg class="chart" id="chart-market" role="img" aria-label="ราคากลางต่อตารางเมตรตามเวลา กรุงเทพฯ และเขตที่เลือก"></svg></div>
+  </section>
+
   <section class="card">
     <div class="card-head">
       <div>
         <h2>ราคากลางต่อ ตร.ม. รายเขต</h2>
         <p class="caption" id="district-caption">คลิกแท่งเพื่อกรองเฉพาะเขตนั้น · นับเฉพาะเขตที่มีอย่างน้อย 5 ประกาศ</p>
+      </div>
+      <div class="seg" id="district-mode" role="radiogroup" aria-label="แสดงเป็น">
+        <button type="button" data-mode="price" role="radio">ราคา/ตร.ม.</button>
+        <button type="button" data-mode="change" role="radio">เปลี่ยนแปลง</button>
       </div>
     </div>
     <div class="chart-scroll"><svg class="chart" id="chart-districts" role="img" aria-label="ราคากลางต่อตารางเมตรแยกตามเขต"></svg></div>
@@ -109,7 +130,7 @@
     <div class="card-head pad">
       <div>
         <h2>โครงการทั้งหมด <span class="count" id="project-count"></span></h2>
-        <p class="caption">คลิกชื่อโครงการเพื่อดูรายละเอียด · “เทียบเขต” คือราคากลางต่อ ตร.ม. ของโครงการเทียบกับราคากลางของเขต (ประเภทห้องเดียวกัน)</p>
+        <p class="caption">คลิกชื่อโครงการเพื่อดูรายละเอียด · “เทียบเขต” คือราคากลางต่อ ตร.ม. ของโครงการเทียบกับราคากลางของเขต (ประเภทห้องเดียวกัน) · “เปลี่ยน” คือราคากลางต่อ ตร.ม. เทียบกับช่วงที่เลือกด้านบน</p>
       </div>
     </div>
     <div class="table-scroll">
@@ -123,6 +144,7 @@
             <th data-sort="median_price" class="num hide-sm">ราคากลาง</th>
             <th data-sort="median_ppsqm" class="num">฿/ตร.ม.</th>
             <th data-sort="vs" class="num">เทียบเขต</th>
+            <th data-sort="change" class="num" id="th-change">เปลี่ยน</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -165,6 +187,32 @@
     <div class="chart-scroll"><svg class="chart" id="chart-ppsqm" role="img" aria-label="ราคากลางต่อตารางเมตรตามเวลา"></svg></div>
     <h3 class="sub-h" id="count-h">จำนวนห้องที่ประกาศขาย</h3>
     <div class="chart-scroll"><svg class="chart" id="chart-count" role="img" aria-label="จำนวนประกาศตามเวลา"></svg></div>
+  </section>
+
+  <section class="card card-flush" id="project-compare">
+    <div class="card-head pad">
+      <div>
+        <h2>เทียบกับอดีต</h2>
+        <p class="caption">“ราคากลาง” เปลี่ยนได้ทั้งจากราคาที่ขยับ และจากห้องที่ขายออก/ลงใหม่ · “ห้องเดิม” เทียบเฉพาะห้องที่ประกาศอยู่ทั้งตอนนั้นและตอนนี้ จึงสะท้อนการปรับราคาจริงของผู้ขาย</p>
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table id="compare-table">
+        <thead>
+          <tr>
+            <th>เทียบกับ</th>
+            <th class="num">฿/ตร.ม. ตอนนั้น</th>
+            <th class="num">ตอนนี้</th>
+            <th class="num">เปลี่ยน</th>
+            <th class="num">ประกาศ</th>
+            <th class="num">ห้องเดิม: ราคาเปลี่ยนเฉลี่ย</th>
+            <th class="num">ห้องเดิมที่ลดราคา</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="cuts" id="cuts"></div>
   </section>
 
   <div class="two-col">

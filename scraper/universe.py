@@ -22,11 +22,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import compare
 from .config import load_watchlist
 from .http import Fetcher, FetchError
 from .models import ROOM_BUCKETS, Listing
 from .sources.ddproperty import _fallback_page_url, _page_data, _page_url, parse_card, project_of
-from .store import Store, _write_json, summarise, today, utc_now
+from .store import Store, _read_json, _write_json, summarise, today, utc_now
 
 log = logging.getLogger("universe")
 
@@ -161,6 +162,38 @@ def _district_summary(rows_by_district: dict[str, list[dict[str, Any]]]) -> dict
     return out
 
 
+def _trend_values(overall: dict[str, Any], districts: dict[str, Any]) -> dict[str, float | None]:
+    """Flatten today's medians into trend.json keys: "<district|all>|<room|all>"."""
+    values: dict[str, float | None] = {}
+    for name, agg in [("all", overall), *districts.items()]:
+        values[f"{name}|all"] = agg.get("median_ppsqm")
+        values[f"n:{name}|all"] = agg.get("listings")
+        for room, sub in (agg.get("by_room") or {}).items():
+            values[f"{name}|{room}"] = sub.get("median_ppsqm")
+            values[f"n:{name}|{room}"] = sub.get("listings")
+    return values
+
+
+def _moves(rows_by_district: dict[str, list[dict[str, Any]]], run_date: str) -> dict[str, Any]:
+    """Same-unit price moves per "<district|all>|<room|all>" and period."""
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for district, rows in rows_by_district.items():
+        for row in rows:
+            for area in ("all", district):
+                for room in ("all", row.get("room") or "unknown"):
+                    groups.setdefault(f"{area}|{room}", []).append(row)
+    out: dict[str, Any] = {}
+    for key, rows in groups.items():
+        periods = {}
+        for period in compare.PERIODS:
+            moves = compare.unit_moves(rows, compare.days_ago(run_date, period))
+            if moves:
+                periods[str(period)] = moves
+        if periods:
+            out[key] = periods
+    return out
+
+
 def _pinned_lookup(config_path: Path):
     """Return a function mapping a DDproperty title to a pinned watch id, if any."""
     try:
@@ -218,6 +251,7 @@ def run(url: str, data_dir: Path, config_path: Path, max_pages: int | None, dry_
         )
         point = summarise(records.values(), run_date)
         store.append_history(wid, point)
+        past = compare.past_medians(store.load_history(wid), run_date)
 
         sample_title = next(iter(project.listings.values())).title
         index.append({
@@ -234,11 +268,22 @@ def run(url: str, data_dir: Path, config_path: Path, max_pages: int | None, dry_
                 for name, agg in point["by_room"].items()
             },
             "pinned_as": pinned(sample_title),
+            **({"past": past} if past else {}),
         })
         for row in records.values():
             rows_by_district.setdefault(project.district or "—", []).append({**row, "_project": wid})
 
     index.sort(key=lambda e: (-e["listings"], e["project"]))
+    all_rows = [r for rows in rows_by_district.values() for r in rows]
+    overall = _district_summary({"all": all_rows}).get("all")
+    districts = _district_summary(rows_by_district)
+
+    trend_path = root / "trend.json"
+    trend = compare.append_trend(
+        _read_json(trend_path, {}), run_date, _trend_values(overall, districts)
+    )
+    _write_json(trend_path, trend, compact=True)
+
     _write_json(
         root / "index.json",
         {
@@ -246,10 +291,9 @@ def run(url: str, data_dir: Path, config_path: Path, max_pages: int | None, dry_
             "source": "ddproperty",
             "region": "Bangkok",
             "crawl": {**vars(stats), "coverage": round(stats.coverage, 3)},
-            "overall": _district_summary(
-                {"all": [r for rows in rows_by_district.values() for r in rows]}
-            ).get("all"),
-            "districts": _district_summary(rows_by_district),
+            "overall": overall,
+            "districts": districts,
+            "moves": _moves(rows_by_district, run_date),
             "projects": index,
         },
         compact=True,

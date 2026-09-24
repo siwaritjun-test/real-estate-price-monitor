@@ -25,6 +25,12 @@ const ROOMS = [
 ];
 const ROOM_SHORT = { studio: "สตูดิโอ", "1br": "1 นอน", "2br": "2 นอน", "3br+": "3+ นอน", unknown: "—" };
 
+// Comparison periods in days; keep in step with scraper/compare.py.
+const PERIODS = [1, 7, 30, 90, 365];
+const PERIOD_TOL = { 1: 1, 7: 2, 30: 5, 90: 10, 365: 21 };
+const PERIOD_SHORT = { 1: "1 วัน", 7: "7 วัน", 30: "30 วัน", 90: "90 วัน", 365: "1 ปี" };
+const PERIOD_THEN = { 1: "เมื่อวาน", 7: "7 วันก่อน", 30: "30 วันก่อน", 90: "90 วันก่อน", 365: "1 ปีก่อน" };
+
 const TABLE_PAGE = 20;
 const PROJECT_PAGE = 50;
 const DISTRICT_TOP = 15;
@@ -57,6 +63,9 @@ const state = {
   view: "market",
   pinned: null,       // data/watches.json
   market: null,       // data/universe/index.json
+  trend: null,        // data/universe/trend.json (columnar daily medians)
+  period: null,       // chosen comparison period in days; null = pick automatically
+  districtMode: "price",
   room: "all",
   // market view
   district: "",
@@ -172,6 +181,58 @@ function historyPoints() {
     })
     .filter(Boolean);
 }
+
+/* ------------------------------------------------------------ comparisons */
+
+function isoDaysAgo(iso, days) {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+function dayGap(a, b) {
+  return Math.abs((new Date(a + "T00:00:00Z") - new Date(b + "T00:00:00Z")) / 864e5);
+}
+
+/** The earlier date closest to `base - days`, within that period's tolerance. */
+function matchDate(dates, base, days) {
+  const target = isoDaysAgo(base, days);
+  let best = null;
+  let gap = PERIOD_TOL[days] + 1;
+  dates.forEach((d) => {
+    if (d >= base) return;
+    const g = dayGap(d, target);
+    if (g < gap) { gap = g; best = d; }
+  });
+  return best;
+}
+
+/** A listing's asking price on `day`, rebuilt from its change log. */
+function priceOn(row, day) {
+  if (!row.first_seen || row.first_seen > day) return null;
+  let price = row.first_price;
+  (row.price_changes || []).forEach((c) => { if ((c.date || "") <= day) price = c.to != null ? c.to : price; });
+  return price;
+}
+
+/** Like-for-like moves since `day` for listings on the market then and now. */
+function unitMoves(rows, day) {
+  const pcts = [];
+  rows.forEach((r) => {
+    const then = priceOn(r, day);
+    if (then && r.price) pcts.push((r.price - then) / then * 100);
+  });
+  if (!pcts.length) return null;
+  return {
+    units: pcts.length,
+    cut: pcts.filter((p) => p < -0.05).length,
+    raised: pcts.filter((p) => p > 0.05).length,
+    median_pct: median(pcts),
+    mean_pct: pcts.reduce((a, b) => a + b, 0) / pcts.length,
+  };
+}
+
+const pctChange = (now, then) => (now && then ? (now / then - 1) * 100 : null);
 
 /* ------------------------------------------------------------- URL state */
 
@@ -420,7 +481,12 @@ function drawLineChart(svgEl, series, opts) {
   const yMax = ticks[ticks.length - 1];
   const plotW = width - PAD.left - PAD.right;
   const plotH = height - PAD.top - PAD.bottom;
-  const x = (d) => PAD.left + (dates.length === 1 ? plotW / 2 : (dates.indexOf(d) / (dates.length - 1)) * plotW);
+  // A true time axis: a missed run leaves a visible gap instead of silently
+  // squeezing weeks and days to the same width.
+  const tOf = (d) => Date.parse(d + "T00:00:00Z");
+  const t0 = tOf(dates[0]);
+  const t1 = tOf(dates[dates.length - 1]);
+  const x = (d) => PAD.left + (t1 === t0 ? plotW / 2 : ((tOf(d) - t0) / (t1 - t0)) * plotW);
   const y = (v) => PAD.top + plotH - ((v - yMin) / (yMax - yMin || 1)) * plotH;
 
   ticks.forEach((t) => {
@@ -429,11 +495,12 @@ function drawLineChart(svgEl, series, opts) {
   });
   add("line", { class: "axis-line", x1: PAD.left, x2: PAD.left + plotW, y1: y(yMin), y2: y(yMin) });
 
-  const step = Math.max(1, Math.ceil(dates.length / 6));
-  dates.forEach((d, i) => {
-    if (i % step === 0 || i === dates.length - 1) {
-      add("text", { x: x(d), y: height - 8, "text-anchor": "middle" }, thDate(d));
-    }
+  // Date labels from the right edge leftwards, skipping any that would collide.
+  let lastLabelX = Infinity;
+  dates.slice().reverse().forEach((d) => {
+    if (lastLabelX - x(d) < 64) return;
+    add("text", { x: x(d), y: height - 8, "text-anchor": "middle" }, thDate(d));
+    lastLabelX = x(d);
   });
 
   // Direct labels at the last point, nudged apart so they never overlap.
@@ -442,8 +509,9 @@ function drawLineChart(svgEl, series, opts) {
     const pts = s.points.slice().sort((a, b) => a.date.localeCompare(b.date));
     const d = pts.map((p, i) => (i ? "L" : "M") + x(p.date).toFixed(1) + "," + y(p.value).toFixed(1)).join(" ");
     add("path", { class: "series-line", d: d, stroke: s.color });
-    if (pts.length <= 2) {
-      pts.forEach((p) => add("circle", { class: "dot", cx: x(p.date), cy: y(p.value), r: 4.5, fill: s.color }));
+    // Few points: mark each one, so it is clear where the data actually is.
+    if (pts.length <= 12) {
+      pts.forEach((p) => add("circle", { class: "dot", cx: x(p.date), cy: y(p.value), r: 4, fill: s.color }));
     }
     const last = pts[pts.length - 1];
     labels.push({ text: s.label, x: x(last.date) + 10, y: y(last.value) + 4 });
@@ -460,8 +528,8 @@ function drawLineChart(svgEl, series, opts) {
   hit.addEventListener("pointermove", (ev) => {
     const box = svgEl.getBoundingClientRect();
     const px = ((ev.clientX - box.left) / box.width) * width;
-    const raw = dates.length === 1 ? 0 : Math.round(((px - PAD.left) / plotW) * (dates.length - 1));
-    const date = dates[Math.min(Math.max(raw, 0), dates.length - 1)];
+    let date = dates[0];
+    dates.forEach((d) => { if (Math.abs(x(d) - px) < Math.abs(x(date) - px)) date = d; });
     cross.setAttribute("x1", x(date));
     cross.setAttribute("x2", x(date));
     cross.setAttribute("opacity", 1);
@@ -569,12 +637,14 @@ function marketRows() {
     if (state.district && p.district !== state.district) return null;
     if (state.budget && !(m.min_price && m.min_price <= state.budget)) return null;
     if (q && !p.project.toLowerCase().includes(q)) return null;
+    const period = activePeriod();
+    const past = period && p.past ? (p.past[String(period)] || {})[state.room] : null;
     const dm = districtStats(p.district);
     const vs = m.median_ppsqm && dm && dm.median_ppsqm ? (m.median_ppsqm / dm.median_ppsqm - 1) * 100 : null;
     return {
       id: p.id, project: p.project, district: p.district, pinned_as: p.pinned_as,
       listings: m.listings, min_price: m.min_price, median_price: m.median_price,
-      median_ppsqm: m.median_ppsqm, vs: vs,
+      median_ppsqm: m.median_ppsqm, vs: vs, change: pctChange(m.median_ppsqm, past),
     };
   }).filter(Boolean);
 }
@@ -613,6 +683,15 @@ function renderPinned() {
   }).join("");
 }
 
+function tileChange() {
+  const period = activePeriod();
+  if (!period) return "";
+  const dates = trendDates();
+  const key = areaKey(state.district);
+  const pct = pctChange(trendAt(key, dates[dates.length - 1]), trendAt(key, periodThenDate(period)));
+  return pct == null ? "" : "<br>" + deltaSpan(pct) + " จาก " + PERIOD_THEN[period];
+}
+
 function renderMarketTiles(rows) {
   const ds = districtStats(state.district);
   const where = state.district ? "เขต" + thDistrict(state.district) : "ทั่วกรุงเทพฯ";
@@ -622,7 +701,7 @@ function renderMarketTiles(rows) {
     '<div class="tile"><div class="label">โครงการที่ตรงเงื่อนไข</div><div class="value">' + fmt(rows.length) +
       ' <small>โครงการ</small></div><div class="sub">' + fmt(listings) + " ประกาศขาย</div></div>" +
     '<div class="tile"><div class="label">ราคากลางต่อ ตร.ม.</div><div class="value">' +
-      baht(ds && ds.median_ppsqm) + '</div><div class="sub">' + where + "</div></div>" +
+      baht(ds && ds.median_ppsqm) + '</div><div class="sub">' + where + tileChange() + "</div></div>" +
     '<div class="tile"><div class="label">ราคากลางต่อห้อง</div><div class="value">' +
       millions(ds && ds.median_price) + ' <small>ล้านบาท</small></div><div class="sub">' + where + "</div></div>" +
     '<div class="tile highlight"><div class="label">โครงการ ฿/ตร.ม. ต่ำสุด</div><div class="value">' +
@@ -633,6 +712,28 @@ function renderMarketTiles(rows) {
 
 function renderDistricts() {
   const m = state.market;
+  $$("#district-mode button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.mode === state.districtMode)));
+  if (state.districtMode === "change") {
+    const period = activePeriod();
+    const dates = trendDates();
+    const now = dates[dates.length - 1];
+    const then = periodThenDate(period);
+    const items = Object.keys(m.districts || {}).map((name) => {
+      const a = trendAt(areaKey(name), now);
+      const b = trendAt(areaKey(name), then);
+      const n = trendAt("n:" + areaKey(name), now) || 0;
+      return a && b && n >= DISTRICT_MIN_LISTINGS
+        ? { name, value: pctChange(a, b), now: a, then: b, thenLabel: PERIOD_THEN[period], selected: name === state.district }
+        : null;
+    }).filter(Boolean).sort((p, q) => q.value - p.value);
+    $("#district-caption").textContent = period
+      ? "ราคากลางต่อ ตร.ม. เทียบ" + PERIOD_THEN[period] + " · คลิกแท่งเพื่อกรองเฉพาะเขตนั้น"
+      : "ต้องมีข้อมูลอย่างน้อย 2 วันจึงจะเทียบรายเขตได้";
+    drawDistrictChange($("#chart-districts"), items);
+    $("#districts-more").hidden = true;
+    return;
+  }
+  $("#district-caption").textContent = "คลิกแท่งเพื่อกรองเฉพาะเขตนั้น · นับเฉพาะเขตที่มีอย่างน้อย 5 ประกาศ";
   const all = Object.keys(m.districts || {}).map((name) => {
     const s = statsFor(m.districts[name]);
     return s && s.median_ppsqm && s.listings >= DISTRICT_MIN_LISTINGS
@@ -669,9 +770,11 @@ function renderProjectsTable(rows) {
   });
 
   $("#project-count").textContent = "(" + fmt(sorted.length) + ")";
+  const period = activePeriod();
+  $("#th-change").textContent = period ? "เปลี่ยน " + PERIOD_SHORT[period] : "เปลี่ยน";
   const body = $("#projects tbody");
   if (!sorted.length) {
-    body.innerHTML = '<tr><td colspan="7" class="empty">ไม่มีโครงการที่ตรงกับตัวกรองนี้ ลองเปลี่ยนเขต งบประมาณ หรือประเภทห้อง</td></tr>';
+    body.innerHTML = '<tr><td colspan="8" class="empty">ไม่มีโครงการที่ตรงกับตัวกรองนี้ ลองเปลี่ยนเขต งบประมาณ หรือประเภทห้อง</td></tr>';
     $("#projects-more").hidden = true;
     return;
   }
@@ -687,12 +790,163 @@ function renderProjectsTable(rows) {
       '<td class="num hide-sm">' + bahtShort(r.median_price) + "</td>" +
       '<td class="num">' + (r.median_ppsqm ? fmt(r.median_ppsqm) : "—") + "</td>" +
       '<td class="num">' + deltaSpan(r.vs, 0) + "</td>" +
+      '<td class="num">' + (r.change == null ? '<span class="muted">—</span>' : deltaSpan(r.change)) + "</td>" +
     "</tr>"
   ).join("");
   const more = $("#projects-more");
   more.hidden = sorted.length <= state.marketShown;
   more.textContent = "แสดงเพิ่ม (" + fmt(Math.min(PROJECT_PAGE, sorted.length - state.marketShown)) +
     " จาก " + fmt(sorted.length - state.marketShown) + " ที่เหลือ)";
+}
+
+/* ---------------------------------------------------- market: history */
+
+function trendDates() {
+  return (state.trend && state.trend.dates) || [];
+}
+
+function trendAt(key, date) {
+  const t = state.trend;
+  if (!t || !date) return null;
+  const i = t.dates.indexOf(date);
+  const col = (t.series || {})[key];
+  return i < 0 || !col ? null : col[i];
+}
+
+function availablePeriods() {
+  const dates = trendDates();
+  const base = dates[dates.length - 1];
+  return base ? PERIODS.filter((p) => matchDate(dates, base, p)) : [];
+}
+
+/** The chosen period if it has data, else the longest available up to 30 days. */
+function activePeriod() {
+  const avail = availablePeriods();
+  if (state.period && avail.includes(state.period)) return state.period;
+  const upTo30 = avail.filter((p) => p <= 30);
+  return upTo30.length ? upTo30[upTo30.length - 1] : avail[0] || null;
+}
+
+function periodThenDate(period) {
+  const dates = trendDates();
+  return period ? matchDate(dates, dates[dates.length - 1], period) : null;
+}
+
+function areaKey(district) {
+  return (district || "all") + "|" + state.room;
+}
+
+function renderPeriodSeg() {
+  const avail = availablePeriods();
+  const active = activePeriod();
+  $("#period-seg").innerHTML = PERIODS.map((p) =>
+    '<button type="button" role="radio" data-period="' + p + '" aria-checked="' + (p === active) + '"' +
+    (avail.includes(p) ? "" : ' disabled title="ยังเก็บข้อมูลไม่ถึง ' + PERIOD_SHORT[p] + '"') + ">" +
+    PERIOD_SHORT[p] + "</button>").join("");
+}
+
+function compareStat(label, value, sub) {
+  return '<div class="cstat"><div class="label">' + label + '</div><div class="value">' + value +
+    '</div><div class="sub">' + (sub || "") + "</div></div>";
+}
+
+function renderMarketCompare() {
+  const dates = trendDates();
+  const period = activePeriod();
+  const then = periodThenDate(period);
+  const now = dates[dates.length - 1];
+  const where = state.district ? "เขต" + thDistrict(state.district) : "ทั่วกรุงเทพฯ";
+  const roomName = (ROOMS.find((r) => r.key === state.room) || ROOMS[0]).label;
+  $("#mc-title").textContent = "เทียบย้อนหลัง · " + where;
+
+  if (!period) {
+    const first = dates[0];
+    $("#mc-caption").textContent = first
+      ? "เริ่มเก็บข้อมูลภาพรวมเมื่อ " + thDate(first, true) + " — ตัวเลขเปรียบเทียบจะเริ่มแสดงหลังรอบถัดไป " +
+        "และครบ 30 วันในวันที่ " + thDate(isoDaysAgo(first, -30), true)
+      : "ตัวเลขเปรียบเทียบจะเริ่มแสดงหลังเก็บข้อมูลภาพรวมครบ 2 วัน";
+    $("#mc-stats").innerHTML = "";
+  } else {
+    $("#mc-caption").textContent = "ห้อง: " + roomName + " · เทียบ " + thDate(now) + " กับ " + thDate(then) +
+      " (" + PERIOD_THEN[period] + ") · ห้องเดิม = เฉพาะประกาศที่อยู่ทั้งสองวัน";
+    const key = areaKey(state.district);
+    const pNow = trendAt(key, now);
+    const pThen = trendAt(key, then);
+    const nNow = trendAt("n:" + key, now);
+    const nThen = trendAt("n:" + key, then);
+    const moves = (((state.market && state.market.moves) || {})[key] || {})[String(period)];
+    $("#mc-stats").innerHTML =
+      compareStat("ราคากลางต่อ ตร.ม.", baht(pNow),
+        pThen ? deltaSpan(pctChange(pNow, pThen)) + " จาก " + baht(pThen) : "ไม่มีข้อมูล" + PERIOD_THEN[period]) +
+      compareStat("ราคาห้องเดิมเปลี่ยน (เฉลี่ย)", moves ? deltaSpan(moves.mean_pct != null ? moves.mean_pct : moves.median_pct, 2) : "—",
+        moves ? "เทียบจาก " + fmt(moves.units) + " ห้องที่ยังประกาศอยู่" : "ยังไม่มีห้องที่เทียบได้") +
+      compareStat("ห้องเดิมที่ลดราคา", moves ? fmt(moves.cut) + " <small>ห้อง</small>" : "—",
+        moves ? (moves.units ? Math.round((moves.cut / moves.units) * 100) : 0) + "% ของห้องเดิม · ขึ้นราคา " +
+          fmt(moves.raised) + " ห้อง" : "") +
+      compareStat("ประกาศขาย", nNow != null ? fmt(nNow) + " <small>ห้อง</small>" : "—",
+        nThen != null && nNow != null ? (nNow - nThen >= 0 ? "+" : "") + fmt(nNow - nThen) + " จาก " + PERIOD_THEN[period] : "");
+  }
+
+  // Line: Bangkok, plus the chosen district.
+  const cutoff = isoDaysAgo(now || "2000-01-01", 400);
+  const seriesFor = (area, label, color) => ({
+    key: area, label: label, color: color,
+    points: dates.map((d, i) => ({ date: d, value: ((state.trend.series || {})[areaKey(area)] || [])[i] }))
+      .filter((pt) => pt.value != null && pt.date >= cutoff),
+  });
+  const series = state.trend ? [seriesFor("", "กรุงเทพฯ", cssVar("--text-secondary"))] : [];
+  if (state.trend && state.district) {
+    series.push(seriesFor(state.district, "เขต" + thDistrict(state.district), cssVar("--series-1")));
+  }
+  $("#legend-market").innerHTML = series.length < 2 ? "" : series.map((sr) =>
+    '<span><span class="sw" style="background:' + sr.color + '"></span>' + sr.label + "</span>").join("");
+  drawLineChart($("#chart-market"), series, { height: 200, format: (v) => baht(v) + "/ตร.ม.", formatShort: bahtShort });
+}
+
+/** Diverging bars: each district's change in median ฿/sqm over the period. */
+function drawDistrictChange(svgEl, items) {
+  if (!items.length) {
+    emptyChart(svgEl, 120, "ยังไม่มีข้อมูลย้อนหลังพอจะเทียบรายเขต");
+    return;
+  }
+  showChart(svgEl);
+  const width = chartWidth(svgEl);
+  const ROW = 26;
+  const PAD = { top: 10, right: 16, bottom: 8, left: width < 480 ? 96 : 130 };
+  const height = PAD.top + items.length * ROW + PAD.bottom;
+  svgEl.setAttribute("viewBox", "0 0 " + width + " " + height);
+  svgEl.innerHTML = "";
+  const add = svgAdder(svgEl);
+  const span = Math.max(1, Math.max.apply(null, items.map((d) => Math.abs(d.value)))) * 1.25;
+  const plotW = width - PAD.left - PAD.right;
+  const zero = PAD.left + plotW / 2;
+  const x = (v) => zero + (v / span) * (plotW / 2);
+  const tip = tooltipEl();
+
+  items.forEach((d, i) => {
+    const y = PAD.top + i * ROW;
+    const g = add("g", { class: "bar-row", tabindex: "0", role: "button" });
+    add("rect", { class: "bar-hit", x: 0, y: y, width: width, height: ROW }, null, g);
+    add("text", { class: "bar-label" + (d.selected ? " on" : ""), x: PAD.left - 10, y: y + ROW / 2 + 4,
+      "text-anchor": "end" }, thDistrict(d.name), g);
+    const x0 = Math.min(zero, x(d.value));
+    add("rect", { class: "bar " + (d.value < 0 ? "down" : "up"), x: x0, y: y + 5, height: ROW - 10, rx: 3,
+      width: Math.max(2, Math.abs(x(d.value) - zero)) }, null, g);
+    // Sign is spelled out, so direction never rests on colour alone.
+    const label = (d.value > 0 ? "+" : d.value < 0 ? "−" : "") + Math.abs(d.value).toFixed(1) + "%";
+    add("text", { class: "bar-value", x: d.value < 0 ? x(d.value) - 6 : x(d.value) + 6, y: y + ROW / 2 + 4,
+      "text-anchor": d.value < 0 ? "end" : "start" }, label, g);
+    g.addEventListener("click", () => setDistrict(d.selected ? "" : d.name));
+    g.addEventListener("keydown", (ev) => { if (ev.key === "Enter") setDistrict(d.selected ? "" : d.name); });
+    g.addEventListener("pointermove", (ev) => {
+      tip.innerHTML = '<div class="t-date">เขต' + thDistrict(d.name) + "</div>" +
+        '<div class="t-row">ตอนนี้<b>' + baht(d.now) + "</b></div>" +
+        '<div class="t-row">' + d.thenLabel + "<b>" + baht(d.then) + "</b></div>";
+      placeTip(tip, ev);
+    });
+    g.addEventListener("pointerleave", () => { tip.hidden = true; });
+  });
+  add("line", { class: "axis-line", x1: zero, x2: zero, y1: PAD.top - 4, y2: height - PAD.bottom });
 }
 
 function renderDistrictSelect() {
@@ -712,8 +966,10 @@ function renderMarket() {
   if (hasMarket) {
     $("#district-select").value = state.district;
     $("#budget-select").value = String(state.budget);
+    renderPeriodSeg();
     const rows = marketRows();
     renderMarketTiles(rows);
+    renderMarketCompare();
     renderDistricts();
     renderProjectsTable(rows);
   }
@@ -891,6 +1147,65 @@ function renderTrend() {
   $("#trend-caption").textContent = cap;
 }
 
+/** Each project history point reduced to the selected room bucket (no range cut). */
+function roomPoints() {
+  return ((state.history && state.history.points) || []).map((p) => {
+    const agg = state.room === "all" ? p : (p.by_room || {})[state.room];
+    return agg && agg.listings != null ? Object.assign({ date: p.date }, agg) : null;
+  }).filter(Boolean);
+}
+
+function renderProjectCompare() {
+  const pts = roomPoints();
+  const rows = currentListings();
+  const body = $("#compare-table tbody");
+  const last = pts[pts.length - 1];
+  const nowPpsqm = summary(rows).medianPpsqm;
+  const dates = pts.map((p) => p.date);
+
+  const lines = last ? PERIODS.map((period) => {
+    const thenDate = matchDate(dates, last.date, period);
+    if (!thenDate) return null;
+    const then = pts.find((p) => p.date === thenDate);
+    // Size-filtered views compare listings only; history is stored per room bucket.
+    const thenPpsqm = sizeActive() ? null : then.median_ppsqm;
+    const moves = unitMoves(rows, thenDate);
+    return "<tr>" +
+      "<td>" + PERIOD_THEN[period] + ' <span class="muted">(' + thDate(thenDate) + ")</span></td>" +
+      '<td class="num">' + (thenPpsqm ? fmt(thenPpsqm) : "—") + "</td>" +
+      '<td class="num">' + (nowPpsqm ? fmt(nowPpsqm) : "—") + "</td>" +
+      '<td class="num">' + (thenPpsqm ? deltaSpan(pctChange(nowPpsqm, thenPpsqm)) : "—") + "</td>" +
+      '<td class="num">' + (sizeActive() ? "—" : then.listings + " → " + rows.length) + "</td>" +
+      '<td class="num">' + (moves ? deltaSpan(moves.mean_pct, 2) : "—") + "</td>" +
+      '<td class="num">' + (moves ? moves.cut + " / " + moves.units + " ห้อง" : "—") + "</td>" +
+      "</tr>";
+  }).filter(Boolean) : [];
+
+  if (!lines.length) {
+    const first = pts.length ? pts[0].date : null;
+    body.innerHTML = '<tr><td colspan="7" class="empty">' + (first
+      ? "เริ่มเก็บข้อมูลโครงการนี้เมื่อ " + thDate(first, true) + " — ตัวเลขเทียบกับเมื่อวานจะขึ้นหลังรอบถัดไป, 7 วันในวันที่ " +
+        thDate(isoDaysAgo(first, -7)) + " และ 30 วันในวันที่ " + thDate(isoDaysAgo(first, -30))
+      : "ยังไม่มีข้อมูลย้อนหลัง") + "</td></tr>";
+  } else {
+    body.innerHTML = lines.join("");
+  }
+
+  // Units whose asking price is now below what they first listed at.
+  const cuts = rows
+    .filter((r) => r.first_price && r.price && r.price < r.first_price)
+    .map((r) => Object.assign({ pct: (r.price / r.first_price - 1) * 100 }, r))
+    .sort((a, b) => a.pct - b.pct)
+    .slice(0, 8);
+  $("#cuts").innerHTML = cuts.length
+    ? '<h3 class="sub-h">ห้องที่ลดราคาตั้งแต่เริ่มติดตาม</h3><ul class="cut-list">' + cuts.map((r) =>
+        '<li><a href="' + esc(r.url) + '" target="_blank" rel="noopener">' + baht(r.first_price) + " → <strong>" +
+        baht(r.price) + "</strong></a> " + deltaSpan(r.pct) + '<span class="muted"> · ' +
+        (r.area_sqm ? sqmFmt(r.area_sqm) + " ตร.ม. · " : "") + (ROOM_SHORT[roomOf(r)] || "") + " · " +
+        labelFor(r.source) + " · พบครั้งแรก " + thDate(r.first_seen) + "</span></li>").join("") + "</ul>"
+    : '<p class="muted cuts-empty">ยังไม่มีห้องที่ลดราคาตั้งแต่เริ่มติดตาม</p>';
+}
+
 function describeRoomType(rt) {
   if (!rt) return "ทุกห้อง";
   const bits = [];
@@ -1010,6 +1325,7 @@ function renderProject() {
   renderLegend($("#legend-scatter"), Array.from(new Set(rows.map((r) => r.source))).sort());
   drawScatter($("#chart-scatter"), rows, med);
   renderTrend();
+  renderProjectCompare();
   renderAlerts();
   renderTable(rows, med);
   writeHash();
@@ -1113,11 +1429,13 @@ async function init() {
   syncThemeButton();
   syncRangeSeg();
 
-  const [pinned, market, alerts] = await Promise.all([
+  const [pinned, market, alerts, trend] = await Promise.all([
     getJSON("data/watches.json", null),
     getJSON("data/universe/index.json", null),
     getJSON("data/alerts.json", { alerts: [] }),
+    getJSON("data/universe/trend.json", null),
   ]);
+  state.trend = trend && trend.dates && trend.dates.length ? trend : null;
   state.pinned = pinned;
   state.market = market && market.projects && market.projects.length ? market : null;
   state.alerts = alerts.alerts || [];
@@ -1146,6 +1464,18 @@ async function init() {
     state.budget = Number(ev.target.value);
     state.marketShown = PROJECT_PAGE;
     renderMarket();
+  });
+  $("#period-seg").addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-period]");
+    if (!btn || btn.disabled) return;
+    state.period = Number(btn.dataset.period);
+    renderMarket();
+  });
+  $("#district-mode").addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-mode]");
+    if (!btn) return;
+    state.districtMode = btn.dataset.mode;
+    renderDistricts();
   });
   $("#districts-more").addEventListener("click", () => {
     state.allDistricts = !state.allDistricts;
@@ -1233,7 +1563,7 @@ async function init() {
     th.addEventListener("click", () => {
       const key = th.dataset.sort;
       // Text columns start A→Z, numbers start high→low except price-like ones.
-      const firstDir = ["project", "district", "min_price", "median_price", "median_ppsqm", "vs"].includes(key) ? 1 : -1;
+      const firstDir = ["project", "district", "min_price", "median_price", "median_ppsqm", "vs", "change"].includes(key) ? 1 : -1;
       state.marketDir = state.marketSort === key ? -state.marketDir : firstDir;
       state.marketSort = key;
       $$("#projects th").forEach((h) => h.removeAttribute("aria-sort"));

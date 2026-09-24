@@ -137,38 +137,51 @@ class DDProperty(Source):
         return result
 
     def _parse_listings(self, data: dict[str, Any], watch: Watch) -> list[Listing]:
-        listings: list[Listing] = []
-        for card in data.get("listingsData") or []:
-            item = card.get("listingData") or {}
-            listing_id = item.get("id")
-            if listing_id is None:
-                continue
-            if item.get("statusCode") not in (None, "ACT"):
-                continue
+        listings = (parse_card(card, watch.deal) for card in data.get("listingsData") or [])
+        return [listing for listing in listings if listing is not None]
 
-            # DDproperty encodes "studio" as -1 bedrooms; normalise it to 0.
-            bedrooms = item.get("bedrooms")
-            bedrooms = max(bedrooms, 0) if isinstance(bedrooms, int) else None
-            bathrooms = item.get("bathrooms")
-            bathrooms = bathrooms if isinstance(bathrooms, int) and bathrooms >= 0 else None
 
-            price_block = item.get("price") or {}
-            price = price_block.get("value")
-            price = int(price) if isinstance(price, (int, float)) and price > 0 else None
+def project_of(card: dict[str, Any]) -> tuple[str | None, str, str | None]:
+    """(project id, project name, district) for one search-result card."""
+    item = card.get("listingData") or {}
+    project_id = (item.get("property") or {}).get("id")
+    # Titles read "<Project name>, bangkok"; the city suffix is not part of the name.
+    name = re.sub(r",\s*[^,]*$", "", item.get("localizedTitle") or "").strip()
+    # "Samsen Nai, Phaya Thai, Bangkok" -> "Phaya Thai"
+    parts = [p.strip() for p in (item.get("shortAddress") or "").split(",") if p.strip()]
+    district = parts[-2] if len(parts) >= 2 else None
+    return (str(project_id) if project_id else None), name, district
 
-            listings.append(
-                Listing(
-                    source=self.name,
-                    listing_id=str(listing_id),
-                    url=item.get("url") or "",
-                    title=item.get("localizedTitle") or "",
-                    deal=watch.deal,
-                    price=price,
-                    area_sqm=_parse_area(item.get("area")),
-                    bedrooms=bedrooms,
-                    bathrooms=bathrooms,
-                    address=item.get("fullAddress") or item.get("shortAddress"),
-                    posted_on=_parse_posted(item.get("postedOn")),
-                )
-            )
-        return listings
+
+def parse_card(card: dict[str, Any], deal: str) -> Listing | None:
+    """Turn one search-result card into a Listing, or None for non-listings."""
+    item = card.get("listingData") or {}
+    listing_id = item.get("id")
+    if listing_id is None:
+        return None
+    if item.get("statusCode") not in (None, "ACT"):
+        return None
+
+    # DDproperty encodes "studio" as -1 bedrooms; normalise it to 0.
+    bedrooms = item.get("bedrooms")
+    bedrooms = max(bedrooms, 0) if isinstance(bedrooms, int) else None
+    bathrooms = item.get("bathrooms")
+    bathrooms = bathrooms if isinstance(bathrooms, int) and bathrooms >= 0 else None
+
+    price_block = item.get("price") or {}
+    price = price_block.get("value")
+    price = int(price) if isinstance(price, (int, float)) and price > 0 else None
+
+    return Listing(
+        source="ddproperty",
+        listing_id=str(listing_id),
+        url=item.get("url") or "",
+        title=item.get("localizedTitle") or "",
+        deal=deal,
+        price=price,
+        area_sqm=_parse_area(item.get("area")),
+        bedrooms=bedrooms,
+        bathrooms=bathrooms,
+        address=item.get("fullAddress") or item.get("shortAddress"),
+        posted_on=_parse_posted(item.get("postedOn")),
+    )

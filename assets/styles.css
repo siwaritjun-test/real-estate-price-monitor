@@ -339,3 +339,63 @@ tbody td.empty { padding: 1.4rem 0.9rem; }
   .tile .value small { font-size: 0.78rem; }
   .tile .sub { font-size: 0.74rem; }
 }
+
+/* ------------------------------------------------ market view + navigation */
+.crumbs { font-size: 0.84rem; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 0.4rem; min-height: 1.3em; }
+.crumbs a { color: var(--text-secondary); text-decoration: none; font-weight: 500; }
+.crumbs a:hover { color: var(--series-1); text-decoration: underline; }
+.crumbs #crumb-market:not([hidden])::before { content: "← "; }
+.crumbs #crumb-project:not([hidden])::before { content: "›"; margin-right: 0.4rem; color: var(--text-muted); }
+.hero-text { min-width: 0; }
+
+.filter-search { flex: 1 1 240px; max-width: 340px; }
+.search-wrap { position: relative; display: block; }
+.search-wrap svg {
+  position: absolute; left: 0.75rem; top: 50%; width: 16px; height: 16px; margin-top: -8px;
+  fill: none; stroke: var(--text-muted); stroke-width: 2; stroke-linecap: round; pointer-events: none;
+}
+.search-wrap input {
+  width: 100%; font: inherit; font-size: 0.9rem; min-height: 38px;
+  padding: 0.4rem 0.8rem 0.4rem 2.2rem; border-radius: 10px;
+  border: 1px solid var(--border-strong); background: var(--surface-1); color: var(--text-primary);
+}
+.search-wrap input:focus-visible, select:focus-visible, .chip:focus-visible, .seg button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--series-1) 40%, transparent); outline-offset: 1px;
+}
+
+.pinned { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.6rem; }
+.pin {
+  display: grid; grid-template-columns: 1fr auto; gap: 0.1rem 0.6rem; align-items: center;
+  padding: 0.75rem 0.9rem; border-radius: 12px; border: 1px solid var(--border-strong);
+  background: var(--surface-1); color: var(--text-primary); text-decoration: none;
+  transition: border-color 0.12s, background 0.12s;
+}
+.pin:hover { border-color: var(--series-1); background: var(--surface-2); }
+.pin-name { font-weight: 600; }
+.pin-meta { grid-column: 1; font-size: 0.78rem; color: var(--text-secondary); }
+.pin-go { grid-column: 2; grid-row: 1 / span 2; color: var(--series-1); font-size: 1.1rem; }
+
+td.proj { max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
+td.proj a { color: var(--text-primary); font-weight: 600; text-decoration: none; }
+td.proj a:hover { color: var(--series-1); text-decoration: underline; }
+.pin-tag {
+  font-size: 0.7rem; font-weight: 600; border-radius: 6px; padding: 0.05rem 0.4rem; margin-left: 0.3rem;
+  background: color-mix(in srgb, var(--series-1) 14%, transparent); color: var(--series-1);
+}
+
+svg.chart .bar { fill: var(--series-1); }
+svg.chart .bar-hit { fill: transparent; }
+svg.chart .bar-row { cursor: pointer; outline: none; }
+svg.chart .bar-row:hover .bar-hit, svg.chart .bar-row:focus-visible .bar-hit { fill: var(--surface-2); }
+svg.chart .bar-label { fill: var(--text-secondary); font-size: 12px; }
+svg.chart .bar-label.on { fill: var(--text-primary); font-weight: 700; }
+svg.chart .bar-value { fill: var(--text-secondary); font-size: 11px; }
+.more-row.inline { border-top: none; padding: 0.2rem 0 0; }
+.sm-only { display: none; }
+@media (max-width: 560px) {
+  #projects .hide-sm { display: none; }
+  .sm-only { display: block; }
+  td.proj { white-space: normal; max-width: none; min-width: 150px; }
+  .proj-sub { font-size: 0.74rem; color: var(--text-muted); font-weight: 400; margin-top: 0.1rem; }
+  #projects th, #projects td { padding-inline: 0.55rem; }
+}

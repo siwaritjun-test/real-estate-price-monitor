@@ -32,12 +32,14 @@ def _read_json(path: Path, default: Any) -> Any:
         return default
 
 
-def _write_json(path: Path, payload: Any) -> None:
+def _write_json(path: Path, payload: Any, compact: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=False) + "\n",
-        encoding="utf-8",
+    text = (
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        if compact
+        else json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=False)
     )
+    path.write_text(text + "\n", encoding="utf-8")
 
 
 def _median(values: Iterable[float]) -> float | None:
@@ -50,6 +52,8 @@ class Store:
     """All reads and writes under the data directory."""
 
     root: Path
+    # Thousands of universe files are written per run; skip the indentation.
+    compact: bool = False
 
     def __post_init__(self) -> None:
         self.root = Path(self.root)
@@ -85,7 +89,7 @@ class Store:
                 key=lambda r: (r.get("price") is None, r.get("price") or 0),
             ),
         }
-        _write_json(self.snapshot_path(watch_id), payload)
+        _write_json(self.snapshot_path(watch_id), payload, self.compact)
 
     def merge(
         self,
@@ -126,7 +130,7 @@ class Store:
         points.sort(key=lambda p: p["date"])
         data["watch_id"] = watch_id
         data["points"] = points[-HISTORY_LIMIT:]
-        _write_json(self.history_path(watch_id), data)
+        _write_json(self.history_path(watch_id), data, self.compact)
 
     # -- alerts --------------------------------------------------------------
     def append_alerts(self, new_alerts: list[dict[str, Any]]) -> list[dict[str, Any]]:

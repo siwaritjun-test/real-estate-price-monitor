@@ -2,8 +2,9 @@ name: Monitor prices
 
 on:
   schedule:
-    # 01:00 UTC = 08:00 Asia/Bangkok, daily.
-    - cron: "0 1 * * *"
+    # Hourly for the pinned projects. Off the top of the hour, when GitHub's
+    # scheduler is least congested; runs can still arrive late or be skipped.
+    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       watch:
@@ -59,8 +60,13 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No data changes."
           else
-            git commit -m "data: monitor run $(date -u +%Y-%m-%d)"
-            git push
+            git commit -m "data: monitor run $(date -u +%Y-%m-%dT%H:%MZ)"
+            # The daily universe job may have pushed meanwhile; it writes
+            # different files, so a rebase applies cleanly.
+            for attempt in 1 2 3 4 5; do
+              git pull --rebase --quiet && git push && break
+              sleep $((attempt * 5))
+            done
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 

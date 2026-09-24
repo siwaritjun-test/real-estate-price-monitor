@@ -24,6 +24,32 @@ permanent record — no database, no hosting bill.
 
 ---
 
+## Two tiers of coverage
+
+| Tier | What | Sources | Refresh | Alerts |
+|---|---|---|---|---|
+| **Universe** | every condo project in Bangkok (~50,000 listings) | DDproperty | daily, 01:40 Bangkok | no |
+| **Pinned watches** | the projects in `config/watchlist.yml` | DDproperty + Livinginsider | hourly | yes |
+
+The split follows what each site costs to read. DDproperty returns 20 listings
+with their project id per search page, so all of Bangkok is ~2,500 requests (about
+an hour at one request per second). Livinginsider costs one request per listing,
+so it is only used for pinned projects. The universe crawl sorts oldest-first so
+pages do not shift under it, and writes nothing if it reached fewer than 90% of
+the pages -- a mid-run block must not look like half the market selling overnight.
+
+```bash
+python -m scraper.universe                  # all of Bangkok, ~1 hour
+python -m scraper.universe --max-pages 40   # quick sample
+```
+
+Universe data lives in `data/universe/` in the same snapshot/history format as a
+pinned watch, plus `index.json` (every project, per-district medians). The
+dashboard opens on the market view; clicking a project opens the same detail page
+pinned projects use.
+
+---
+
 ## Sources
 
 | Source | Status | How it is read |
@@ -159,8 +185,15 @@ Delivery:
    scheduled run can commit `data/` back.
 4. (Optional) add the `ALERT_WEBHOOK_URL` secret.
 
-`.github/workflows/monitor.yml` runs daily at 01:00 UTC (08:00 Bangkok) and can be
-triggered by hand from the Actions tab, optionally for a single watch.
+`.github/workflows/monitor.yml` runs the pinned watches hourly (at :17) and
+`.github/workflows/universe.yml` crawls Bangkok daily at 18:40 UTC (01:40 Bangkok).
+Both can be triggered by hand from the Actions tab. They write different files
+under `data/`, and each rebases before pushing, so they can overlap safely.
+
+GitHub's scheduler delays and drops cron runs under load, hourly ones most of all.
+If runs go missing, point an external cron (e.g. cron-job.org) at the
+`workflow_dispatch` API for `monitor.yml` with a fine-grained token that has
+Actions read/write on this repo.
 
 ---
 

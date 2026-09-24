@@ -25,3 +25,13 @@ def test_room_bucket():
     assert [room_bucket(b) for b in (None, 0, 1, 2, 3, 5)] == [
         "unknown", "studio", "1br", "2br", "3br+", "3br+",
     ]
+
+
+def test_implausible_price_per_sqm_is_rejected():
+    from scraper.models import Listing
+    typo = Listing("ddproperty", "1", "u", "t", price=4_800_000, area_sqm=532.0)
+    assert "plausible" in typo.implausible()
+    rent_as_sale = Listing("ddproperty", "2", "u", "t", price=180_000, area_sqm=30.0)
+    assert rent_as_sale.implausible()
+    fine = Listing("ddproperty", "3", "u", "t", price=4_800_000, area_sqm=53.2)
+    assert fine.implausible() is None

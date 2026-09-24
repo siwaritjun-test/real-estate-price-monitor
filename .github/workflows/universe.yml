@@ -1,0 +1,77 @@
+name: Bangkok universe
+
+on:
+  schedule:
+    # 18:40 UTC = 01:40 Asia/Bangkok, daily -- a quiet hour for the site.
+    - cron: "40 18 * * *"
+  workflow_dispatch:
+    inputs:
+      max_pages:
+        description: "Stop after this many pages (blank = all of Bangkok)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: universe
+  cancel-in-progress: false
+
+jobs:
+  universe:
+    runs-on: ubuntu-latest
+    # ~2,500 pages at one request per second is about an hour.
+    timeout-minutes: 240
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          pip install pytest
+          python -m pytest tests -q
+
+      - name: Crawl Bangkok condos
+        id: crawl
+        run: |
+          python -m scraper.universe --data data \
+            ${{ github.event.inputs.max_pages && format('--max-pages {0}', github.event.inputs.max_pages) || '' }}
+
+      - name: Commit updated data
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/universe
+          if git diff --staged --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No data changes."
+          else
+            git commit -q -m "data: Bangkok universe $(date -u +%Y-%m-%d)"
+            # Hourly monitor runs push while this one crawls; they touch other
+            # files, so a rebase applies cleanly.
+            for attempt in 1 2 3 4 5; do
+              git pull --rebase --quiet && git push && break
+              sleep $((attempt * 5))
+            done
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Summary
+        run: |
+          {
+            echo "### Bangkok universe"
+            echo ""
+            echo "- Projects: ${{ steps.crawl.outputs.projects || '—' }}"
+            echo "- Listings: ${{ steps.crawl.outputs.listings || '—' }}"
+            echo "- Data committed: ${{ steps.commit.outputs.changed }}"
+          } >> "$GITHUB_STEP_SUMMARY"

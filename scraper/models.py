@@ -83,6 +83,11 @@ class Listing:
             return f"sale price {self.price} below floor"
         if self.deal == "rent" and self.price > 2_000_000:
             return f"rent price {self.price} above ceiling"
+        # A size typo (532 for 53.2 sqm) or a rent posted as a sale lands far
+        # outside anything a Bangkok condo sells for per square metre.
+        ppsqm = self.price_per_sqm
+        if self.deal == "sale" and ppsqm and not 15_000 <= ppsqm <= 1_000_000:
+            return f"{ppsqm:,} baht/sqm is outside the plausible range"
         return None
 
     def to_dict(self) -> dict[str, Any]:

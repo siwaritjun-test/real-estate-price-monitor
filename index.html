@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ราคาคอนโด</title>
-<meta name="description" content="ติดตามราคาประกาศขายคอนโดรายวัน แยกตามโครงการ ประเภทห้อง และขนาด">
+<meta name="description" content="ติดตามราคาประกาศขายคอนโดทั่วกรุงเทพฯ แยกตามโครงการ เขต ประเภทห้อง และขนาด">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🏢</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,9 +19,12 @@
 
 <header class="hero">
   <div class="wrap hero-inner">
-    <div>
-      <p class="eyebrow">ติดตามราคาประกาศขายคอนโด</p>
-      <h1 id="project-name">กำลังโหลด…</h1>
+    <div class="hero-text">
+      <nav class="crumbs" aria-label="เส้นทาง">
+        <a href="#v=market" id="crumb-market">ภาพรวมตลาดกรุงเทพฯ</a>
+        <span id="crumb-project" hidden></span>
+      </nav>
+      <h1 id="page-title">กำลังโหลด…</h1>
       <p class="hero-meta" id="hero-meta"></p>
     </div>
     <button id="theme-toggle" class="icon-btn" type="button" aria-label="สลับโหมดมืด">
@@ -33,9 +36,30 @@
 
 <nav class="filters" aria-label="ตัวกรอง">
   <div class="wrap filters-inner">
-    <label class="filter">
-      <span class="filter-label">โครงการ</span>
-      <span class="select-wrap"><select id="project-select"></select></span>
+    <label class="filter filter-search">
+      <span class="filter-label">ค้นหาโครงการ</span>
+      <span class="search-wrap">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" id="search" list="project-list" placeholder="ชื่อโครงการ…" autocomplete="off">
+      </span>
+      <datalist id="project-list"></datalist>
+    </label>
+
+    <label class="filter market-only">
+      <span class="filter-label">เขต</span>
+      <span class="select-wrap"><select id="district-select"></select></span>
+    </label>
+
+    <label class="filter market-only">
+      <span class="filter-label">งบประมาณ</span>
+      <span class="select-wrap"><select id="budget-select">
+        <option value="0">ทุกราคา</option>
+        <option value="2000000">ไม่เกิน 2 ล้าน</option>
+        <option value="3000000">ไม่เกิน 3 ล้าน</option>
+        <option value="5000000">ไม่เกิน 5 ล้าน</option>
+        <option value="8000000">ไม่เกิน 8 ล้าน</option>
+        <option value="15000000">ไม่เกิน 15 ล้าน</option>
+      </select></span>
     </label>
 
     <div class="filter">
@@ -43,7 +67,7 @@
       <div class="chips" id="room-chips" role="radiogroup" aria-labelledby="room-label"></div>
     </div>
 
-    <div class="filter filter-size">
+    <div class="filter filter-size project-only">
       <span class="filter-label">ขนาด <b id="size-readout"></b></span>
       <div class="range" id="size-range">
         <div class="range-track"><div class="range-fill" id="size-fill"></div></div>
@@ -55,7 +79,61 @@
   </div>
 </nav>
 
-<main class="wrap" id="main">
+<!-- ============================================================ market view -->
+<main class="wrap" id="view-market" hidden>
+
+  <section class="tiles" id="market-tiles" aria-label="สรุปตลาด"></section>
+
+  <section class="card" id="pinned-card" hidden>
+    <div class="card-head">
+      <div>
+        <h2>โครงการที่ติดตามใกล้ชิด</h2>
+        <p class="caption">ดึงจากทั้ง DDproperty และ Livinginsider ทุกชั่วโมง พร้อมแจ้งเตือนราคาลดและประกาศใหม่</p>
+      </div>
+    </div>
+    <div class="pinned" id="pinned"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2>ราคากลางต่อ ตร.ม. รายเขต</h2>
+        <p class="caption" id="district-caption">คลิกแท่งเพื่อกรองเฉพาะเขตนั้น · นับเฉพาะเขตที่มีอย่างน้อย 5 ประกาศ</p>
+      </div>
+    </div>
+    <div class="chart-scroll"><svg class="chart" id="chart-districts" role="img" aria-label="ราคากลางต่อตารางเมตรแยกตามเขต"></svg></div>
+    <div class="more-row inline"><button type="button" class="link-btn" id="districts-more" hidden></button></div>
+  </section>
+
+  <section class="card card-flush">
+    <div class="card-head pad">
+      <div>
+        <h2>โครงการทั้งหมด <span class="count" id="project-count"></span></h2>
+        <p class="caption">คลิกชื่อโครงการเพื่อดูรายละเอียด · “เทียบเขต” คือราคากลางต่อ ตร.ม. ของโครงการเทียบกับราคากลางของเขต (ประเภทห้องเดียวกัน)</p>
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table id="projects">
+        <thead>
+          <tr>
+            <th data-sort="project">โครงการ</th>
+            <th data-sort="district" class="hide-sm">เขต</th>
+            <th data-sort="listings" class="num" aria-sort="descending">ประกาศ</th>
+            <th data-sort="min_price" class="num hide-sm">เริ่มต้น</th>
+            <th data-sort="median_price" class="num hide-sm">ราคากลาง</th>
+            <th data-sort="median_ppsqm" class="num">฿/ตร.ม.</th>
+            <th data-sort="vs" class="num">เทียบเขต</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="more-row"><button type="button" class="more-btn" id="projects-more" hidden></button></div>
+  </section>
+</main>
+
+<!-- =========================================================== project view -->
+<main class="wrap" id="view-project" hidden>
 
   <section class="tiles" id="tiles" aria-label="สรุปตอนนี้"></section>
 
@@ -74,7 +152,7 @@
     <div class="card-head">
       <div>
         <h2>แนวโน้มราคากลางต่อ ตร.ม.</h2>
-        <p class="caption" id="trend-caption">เส้นละ 1 เว็บไซต์ ถ้าสองเส้นใกล้กัน แปลว่าทั้งสองเว็บเห็นตลาดเดียวกัน</p>
+        <p class="caption" id="trend-caption"></p>
       </div>
       <div class="seg" id="range-seg" role="radiogroup" aria-label="ช่วงเวลา">
         <button type="button" data-days="30" role="radio">30 วัน</button>
@@ -137,7 +215,7 @@
 </main>
 
 <footer class="wrap foot">
-  <p id="footer-note">ราคาที่แสดงคือราคาประกาศขาย ไม่ใช่ราคาซื้อขายจริง · ห้องเดียวกันที่ลงหลายเว็บจะนับซ้ำ</p>
+  <p id="footer-note">ราคาที่แสดงคือราคาประกาศขาย ไม่ใช่ราคาซื้อขายจริง · ภาพรวมตลาดมาจาก DDproperty (อัปเดตวันละครั้ง) · โครงการที่ติดตามใกล้ชิดรวม Livinginsider ด้วย (อัปเดตทุกชั่วโมง) · ห้องเดียวกันที่ลงหลายเว็บจะนับซ้ำ</p>
 </footer>
 
 <script src="assets/app.js"></script>

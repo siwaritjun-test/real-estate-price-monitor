@@ -1,8 +1,12 @@
-/* Condo price monitor — reads the JSON the scraper commits and draws the dashboard.
+/* Condo price monitor — reads the JSON the scrapers commit and draws the dashboard.
    No build step and no dependencies: the charts are hand-rolled SVG.
 
-   Filters: project (one watch per project), room bucket, and a size range. The
-   room bucket drives every figure including the history; the size range can
+   Two views:
+   - market:  every Bangkok condo project from DDproperty (data/universe/, daily)
+   - project: one project's listings. Pinned watches (data/, hourly, both sites)
+              and universe projects (data/universe/) share the same file format.
+
+   The room bucket drives every figure including history; the size range can
    only narrow what is on the market *now*, because history is stored per bucket. */
 
 const SOURCE_LABELS = { ddproperty: "DDproperty", livinginsider: "Livinginsider", hipflat: "Hipflat" };
@@ -22,25 +26,61 @@ const ROOMS = [
 const ROOM_SHORT = { studio: "สตูดิโอ", "1br": "1 นอน", "2br": "2 นอน", "3br+": "3+ นอน", unknown: "—" };
 
 const TABLE_PAGE = 20;
+const PROJECT_PAGE = 50;
+const DISTRICT_TOP = 15;
+const DISTRICT_MIN_LISTINGS = 5;
 const STATUS_TH = { ok: "ปกติ", blocked: "ถูกบล็อก", error: "ผิดพลาด", skipped: "ข้าม", disabled: "ปิดอยู่" };
 const STATUS_ICON = { ok: "✓", blocked: "⚠", error: "✕", skipped: "–", disabled: "○" };
 
+// DDproperty publishes romanised district names; show the Thai ones.
+const DISTRICT_TH = {
+  "Phra Nakhon": "พระนคร", "Dusit": "ดุสิต", "Nong Chok": "หนองจอก", "Bang Rak": "บางรัก",
+  "Bang Khen": "บางเขน", "Bang Kapi": "บางกะปิ", "Pathum Wan": "ปทุมวัน",
+  "Pom Prap Sattru Phai": "ป้อมปราบศัตรูพ่าย", "Phra Khanong": "พระโขนง", "Min Buri": "มีนบุรี",
+  "Lat Krabang": "ลาดกระบัง", "Yan Nawa": "ยานนาวา", "Samphanthawong": "สัมพันธวงศ์",
+  "Phaya Thai": "พญาไท", "Thon Buri": "ธนบุรี", "Bangkok Yai": "บางกอกใหญ่", "Huai Khwang": "ห้วยขวาง",
+  "Khlong San": "คลองสาน", "Taling Chan": "ตลิ่งชัน", "Bangkok Noi": "บางกอกน้อย",
+  "Bang Khun Thian": "บางขุนเทียน", "Phasi Charoen": "ภาษีเจริญ", "Nong Khaem": "หนองแขม",
+  "Rat Burana": "ราษฎร์บูรณะ", "Bang Phlat": "บางพลัด", "Din Daeng": "ดินแดง", "Bueng Kum": "บึงกุ่ม",
+  "Sathon": "สาทร", "Bang Sue": "บางซื่อ", "Chatuchak": "จตุจักร", "Bang Kho Laem": "บางคอแหลม",
+  "Prawet": "ประเวศ", "Khlong Toei": "คลองเตย", "Suan Luang": "สวนหลวง", "Chom Thong": "จอมทอง",
+  "Don Mueang": "ดอนเมือง", "Ratchathewi": "ราชเทวี", "Lat Phrao": "ลาดพร้าว", "Watthana": "วัฒนา",
+  "Bang Khae": "บางแค", "Lak Si": "หลักสี่", "Sai Mai": "สายไหม", "Khan Na Yao": "คันนายาว",
+  "Saphan Sung": "สะพานสูง", "Wang Thonglang": "วังทองหลาง", "Khlong Sam Wa": "คลองสามวา",
+  "Bang Na": "บางนา", "Thawi Watthana": "ทวีวัฒนา", "Thung Khru": "ทุ่งครุ", "Bang Bon": "บางบอน",
+};
+const squash = (s) => String(s || "").toLowerCase().replace(/[^a-z]/g, "");
+const DISTRICT_KEYED = Object.fromEntries(Object.entries(DISTRICT_TH).map(([k, v]) => [squash(k), v]));
+const thDistrict = (d) => (d ? DISTRICT_KEYED[squash(d)] || d : "—");
+
 const state = {
-  index: null,
-  projectId: null,
+  view: "market",
+  pinned: null,       // data/watches.json
+  market: null,       // data/universe/index.json
   room: "all",
-  sqm: null,        // [lo, hi] currently selected
-  bounds: null,     // [lo, hi] of the project's listings
+  // market view
+  district: "",
+  budget: 0,
+  marketSort: "listings",
+  marketDir: -1,
+  marketShown: PROJECT_PAGE,
+  allDistricts: false,
+  // project view
+  projectId: null,
+  projectKind: null,  // "pinned" | "universe"
+  sqm: null,          // [lo, hi] currently selected
+  bounds: null,       // [lo, hi] of the project's listings
   days: 90,
   history: null,
   snapshot: null,
   alerts: [],
   sort: "price",
-  showAll: false,
   dir: 1,
+  showAll: false,
 };
 
 const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "#888";
 const colorFor = (src) => cssVar(SOURCE_VARS[src] || "--text-secondary");
 const labelFor = (src) => SOURCE_LABELS[src] || src;
@@ -61,6 +101,9 @@ const thDate = (iso, withYear) =>
   new Date(iso + (iso.length === 10 ? "T00:00:00Z" : "")).toLocaleDateString("th-TH",
     Object.assign({ day: "numeric", month: "short", timeZone: iso.length === 10 ? "UTC" : "Asia/Bangkok" },
       withYear ? { year: "numeric" } : {}));
+const thDateTime = (iso) => new Date(iso).toLocaleString("th-TH", {
+  day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok",
+}) + " น.";
 
 function roomOf(r) {
   if (r.room) return r.room;
@@ -132,18 +175,29 @@ function historyPoints() {
 
 /* ------------------------------------------------------------- URL state */
 
+// #v=market&r=1br&d=Watthana&b=3000000   or   #p=<project>&r=1br&s=25-35
 function readHash() {
   const q = new URLSearchParams(location.hash.slice(1));
   const size = (q.get("s") || "").split("-").map(Number);
-  return { p: q.get("p"), r: q.get("r"), s: size.length === 2 && size.every(isFinite) ? size : null };
+  return {
+    p: q.get("p"), r: q.get("r"), d: q.get("d") || "", b: Number(q.get("b")) || 0,
+    s: size.length === 2 && size.every(isFinite) ? size : null,
+  };
 }
 
 function writeHash() {
   const q = new URLSearchParams();
-  q.set("p", state.projectId);
+  if (state.view === "project") {
+    q.set("p", state.projectId);
+    if (sizeActive()) q.set("s", state.sqm[0] + "-" + state.sqm[1]);
+  } else {
+    q.set("v", "market");
+    if (state.district) q.set("d", state.district);
+    if (state.budget) q.set("b", state.budget);
+  }
   if (state.room !== "all") q.set("r", state.room);
-  if (sizeActive()) q.set("s", state.sqm[0] + "-" + state.sqm[1]);
-  history.replaceState(null, "", "#" + q.toString());
+  const next = "#" + q.toString();
+  if (location.hash !== next) history.replaceState(null, "", next);
 }
 
 /* ---------------------------------------------------------------- charts */
@@ -205,7 +259,8 @@ function chartWidth(svgEl) {
 /** Show a message in place of a chart. HTML rather than SVG text so it wraps on a phone. */
 function emptyChart(svgEl, height, msg) {
   svgEl.innerHTML = "";
-  svgEl.hidden = true;
+  // SVG elements have no .hidden property; the attribute is what CSS sees.
+  svgEl.setAttribute("hidden", "");
   let note = svgEl.parentElement.querySelector(".chart-empty");
   if (!note) {
     note = document.createElement("p");
@@ -217,7 +272,7 @@ function emptyChart(svgEl, height, msg) {
 }
 
 function showChart(svgEl) {
-  svgEl.hidden = false;
+  svgEl.removeAttribute("hidden");
   const note = svgEl.parentElement.querySelector(".chart-empty");
   if (note) note.hidden = true;
 }
@@ -347,7 +402,7 @@ function drawLineChart(svgEl, series, opts) {
   const nDates = new Set(live.flatMap((s) => s.points.map((p) => p.date))).size;
   if (nDates < 2) {
     emptyChart(svgEl, Math.min(height, 120), nDates
-      ? "เก็บข้อมูลได้ 1 วันแล้ว — เส้นแนวโน้มจะขึ้นหลังรอบถัดไป (พรุ่งนี้ 8:00 น.)"
+      ? "ยังมีข้อมูลแค่ 1 วัน — เส้นแนวโน้มจะแสดงเมื่อเก็บข้อมูลครบ 2 วัน"
       : "ยังไม่มีข้อมูลในช่วงนี้");
     return;
   }
@@ -430,6 +485,59 @@ function drawLineChart(svgEl, series, opts) {
   });
 }
 
+/** Horizontal bars, one per district, with the Bangkok median as a reference line. */
+function drawDistrictBars(svgEl, items, reference) {
+  if (!items.length) {
+    emptyChart(svgEl, 120, "ยังไม่มีข้อมูลรายเขตสำหรับตัวกรองนี้");
+    return;
+  }
+  showChart(svgEl);
+  const width = chartWidth(svgEl);
+  const ROW = 26;
+  const PAD = { top: 22, right: 70, bottom: 8, left: width < 480 ? 96 : 130 };
+  const height = PAD.top + items.length * ROW + PAD.bottom;
+  svgEl.setAttribute("viewBox", "0 0 " + width + " " + height);
+  svgEl.innerHTML = "";
+  const add = svgAdder(svgEl);
+
+  const max = Math.max.apply(null, items.map((d) => d.value).concat(reference || 0)) * 1.05;
+  const plotW = width - PAD.left - PAD.right;
+  const x = (v) => PAD.left + (v / max) * plotW;
+  const anySelected = items.some((d) => d.selected);
+  const tip = tooltipEl();
+
+  items.forEach((d, i) => {
+    const y = PAD.top + i * ROW;
+    const g = add("g", { class: "bar-row", tabindex: "0", role: "button",
+      "aria-label": thDistrict(d.name) + " " + baht(d.value) + " ต่อ ตร.ม." });
+    add("rect", { class: "bar-hit", x: 0, y: y, width: width, height: ROW }, null, g);
+    add("text", { class: "bar-label" + (d.selected ? " on" : ""), x: PAD.left - 10, y: y + ROW / 2 + 4,
+      "text-anchor": "end" }, thDistrict(d.name), g);
+    add("rect", {
+      class: "bar", x: PAD.left, y: y + 5, height: ROW - 10, rx: 3,
+      width: Math.max(2, x(d.value) - PAD.left),
+      opacity: anySelected && !d.selected ? 0.35 : 1,
+    }, null, g);
+    add("text", { class: "bar-value", x: x(d.value) + 6, y: y + ROW / 2 + 4 }, bahtShort(d.value), g);
+    g.addEventListener("click", () => setDistrict(d.selected ? "" : d.name));
+    g.addEventListener("keydown", (ev) => { if (ev.key === "Enter") setDistrict(d.selected ? "" : d.name); });
+    g.addEventListener("pointermove", (ev) => {
+      tip.innerHTML = '<div class="t-date">เขต' + thDistrict(d.name) + "</div>" +
+        '<div class="t-row">ราคากลาง/ตร.ม.<b>' + baht(d.value) + "</b></div>" +
+        '<div class="t-row">ประกาศ<b>' + fmt(d.listings) + "</b></div>" +
+        (d.projects ? '<div class="t-row">โครงการ<b>' + fmt(d.projects) + "</b></div>" : "");
+      placeTip(tip, ev);
+    });
+    g.addEventListener("pointerleave", () => { tip.hidden = true; });
+  });
+
+  if (reference) {
+    add("line", { class: "ref-line", x1: x(reference), x2: x(reference), y1: PAD.top - 6, y2: height - PAD.bottom });
+    add("text", { class: "ref-label", x: x(reference), y: PAD.top - 10, "text-anchor": "middle" },
+      "กทม. " + bahtShort(reference));
+  }
+}
+
 function renderLegend(el, keys) {
   // Only for two or more series; a single series is named by the title.
   el.innerHTML = keys.length < 2 ? "" : keys.map((k) =>
@@ -437,35 +545,241 @@ function renderLegend(el, keys) {
   ).join("");
 }
 
-/* --------------------------------------------------------------- sections */
+/* ------------------------------------------------------------ market view */
 
-function renderHero() {
-  const entry = state.index.watches.find((w) => w.id === state.projectId) || {};
-  $("#project-name").textContent = entry.project || state.projectId;
-  document.title = (entry.project || "ราคาคอนโด") + " · ราคาคอนโด";
-  const bits = [];
-  bits.push("<span>" + (entry.deal === "rent" ? "ประกาศเช่า" : "ประกาศขาย") + " " + (entry.listings || 0) + " รายการ</span>");
-  if (state.index.generated_at) {
-    const t = new Date(state.index.generated_at);
-    bits.push('<span class="live">อัปเดต ' + t.toLocaleString("th-TH", {
-      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok",
-    }) + " น.</span>");
+function statsFor(entry) {
+  if (!entry) return null;
+  return state.room === "all" ? entry : (entry.by_room || {})[state.room] || null;
+}
+
+function districtStats(name) {
+  const m = state.market;
+  return statsFor(name ? (m.districts || {})[name] : m.overall);
+}
+
+function searchQuery() {
+  return state.view === "market" ? $("#search").value.trim().toLowerCase() : "";
+}
+
+function marketRows() {
+  const q = searchQuery();
+  return state.market.projects.map((p) => {
+    const m = statsFor(p);
+    if (!m || !m.listings) return null;
+    if (state.district && p.district !== state.district) return null;
+    if (state.budget && !(m.min_price && m.min_price <= state.budget)) return null;
+    if (q && !p.project.toLowerCase().includes(q)) return null;
+    const dm = districtStats(p.district);
+    const vs = m.median_ppsqm && dm && dm.median_ppsqm ? (m.median_ppsqm / dm.median_ppsqm - 1) * 100 : null;
+    return {
+      id: p.id, project: p.project, district: p.district, pinned_as: p.pinned_as,
+      listings: m.listings, min_price: m.min_price, median_price: m.median_price,
+      median_ppsqm: m.median_ppsqm, vs: vs,
+    };
+  }).filter(Boolean);
+}
+
+function projectHref(row) {
+  return "#p=" + encodeURIComponent(row.pinned_as || row.id) + (state.room !== "all" ? "&r=" + state.room : "");
+}
+
+function renderMarketHero() {
+  $("#page-title").textContent = "คอนโดกรุงเทพฯ";
+  document.title = "คอนโดกรุงเทพฯ · ราคาคอนโด";
+  $("#crumb-market").hidden = true;
+  $("#crumb-project").hidden = true;
+  const m = state.market;
+  if (!m) {
+    $("#hero-meta").innerHTML = '<span class="muted-note">กำลังเก็บข้อมูลทั้งกรุงเทพฯ รอบแรก ' +
+      "(ใช้เวลาประมาณ 1 ชั่วโมง) ระหว่างนี้ดูโครงการที่ติดตามใกล้ชิดได้ด้านล่าง</span>";
+    return;
   }
-  bits.push('<span class="muted-note">อัปเดตอัตโนมัติทุกวัน 8:00 น.</span>');
+  $("#hero-meta").innerHTML =
+    "<span>" + fmt(m.projects.length) + " โครงการ · " + fmt(m.overall ? m.overall.listings : 0) + " ประกาศขาย</span>" +
+    '<span class="live">อัปเดต ' + thDateTime(m.generated_at) + "</span>" +
+    '<span class="muted-note">ข้อมูล DDproperty · อัปเดตวันละครั้ง</span>';
+}
+
+function renderPinned() {
+  const list = (state.pinned && state.pinned.watches) || [];
+  $("#pinned-card").hidden = !list.length;
+  $("#pinned").innerHTML = list.map((w) => {
+    const n = state.room === "all" ? w.listings : (w.rooms || {})[state.room] || 0;
+    return '<a class="pin" href="#p=' + encodeURIComponent(w.id) + (state.room !== "all" ? "&r=" + state.room : "") + '">' +
+      '<span class="pin-name">' + esc(w.project) + "</span>" +
+      '<span class="pin-meta">' + n + " ประกาศ" + (state.room === "all" && w.median_ppsqm ? " · " + baht(w.median_ppsqm) + "/ตร.ม." : "") +
+      " · อัปเดต " + (state.pinned.generated_at ? thDateTime(state.pinned.generated_at) : "—") + "</span>" +
+      '<span class="pin-go" aria-hidden="true">→</span></a>';
+  }).join("");
+}
+
+function renderMarketTiles(rows) {
+  const ds = districtStats(state.district);
+  const where = state.district ? "เขต" + thDistrict(state.district) : "ทั่วกรุงเทพฯ";
+  const listings = rows.reduce((s, r) => s + (r.listings || 0), 0);
+  const value = rows.filter((r) => r.listings >= 3 && r.median_ppsqm).sort((a, b) => a.median_ppsqm - b.median_ppsqm)[0];
+  $("#market-tiles").innerHTML =
+    '<div class="tile"><div class="label">โครงการที่ตรงเงื่อนไข</div><div class="value">' + fmt(rows.length) +
+      ' <small>โครงการ</small></div><div class="sub">' + fmt(listings) + " ประกาศขาย</div></div>" +
+    '<div class="tile"><div class="label">ราคากลางต่อ ตร.ม.</div><div class="value">' +
+      baht(ds && ds.median_ppsqm) + '</div><div class="sub">' + where + "</div></div>" +
+    '<div class="tile"><div class="label">ราคากลางต่อห้อง</div><div class="value">' +
+      millions(ds && ds.median_price) + ' <small>ล้านบาท</small></div><div class="sub">' + where + "</div></div>" +
+    '<div class="tile highlight"><div class="label">โครงการ ฿/ตร.ม. ต่ำสุด</div><div class="value">' +
+      (value ? baht(value.median_ppsqm) : "—") + '</div><div class="sub">' +
+      (value ? '<a href="' + projectHref(value) + '">' + esc(value.project) + "</a> · " + value.listings + " ประกาศ"
+        : "ต้องมีอย่างน้อย 3 ประกาศ") + "</div></div>";
+}
+
+function renderDistricts() {
+  const m = state.market;
+  const all = Object.keys(m.districts || {}).map((name) => {
+    const s = statsFor(m.districts[name]);
+    return s && s.median_ppsqm && s.listings >= DISTRICT_MIN_LISTINGS
+      ? { name, value: s.median_ppsqm, listings: s.listings, projects: m.districts[name].projects,
+          selected: name === state.district }
+      : null;
+  }).filter(Boolean).sort((a, b) => b.value - a.value);
+
+  let shown = state.allDistricts ? all : all.slice(0, DISTRICT_TOP);
+  // Keep the selected district visible even when it is outside the top rows.
+  const sel = all.find((d) => d.selected);
+  if (sel && !shown.includes(sel)) shown = shown.concat(sel);
+  const overall = statsFor(m.overall);
+  drawDistrictBars($("#chart-districts"), shown, overall && overall.median_ppsqm);
+
+  const more = $("#districts-more");
+  more.hidden = all.length <= DISTRICT_TOP;
+  more.textContent = state.allDistricts ? "แสดงเฉพาะ " + DISTRICT_TOP + " เขตแพงสุด" : "แสดงทุกเขต (" + all.length + ")";
+}
+
+function renderProjectsTable(rows) {
+  const key = state.marketSort;
+  const dir = state.marketDir;
+  const sorted = rows.slice().sort((a, b) => {
+    // Pinned projects always lead.
+    if (!!a.pinned_as !== !!b.pinned_as) return a.pinned_as ? -1 : 1;
+    const va = a[key];
+    const vb = b[key];
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (typeof va === "string") return dir * (key === "district" ? thDistrict(va) : va).localeCompare(key === "district" ? thDistrict(vb) : vb, "th");
+    return dir * (va - vb);
+  });
+
+  $("#project-count").textContent = "(" + fmt(sorted.length) + ")";
+  const body = $("#projects tbody");
+  if (!sorted.length) {
+    body.innerHTML = '<tr><td colspan="7" class="empty">ไม่มีโครงการที่ตรงกับตัวกรองนี้ ลองเปลี่ยนเขต งบประมาณ หรือประเภทห้อง</td></tr>';
+    $("#projects-more").hidden = true;
+    return;
+  }
+  const shown = sorted.slice(0, state.marketShown);
+  body.innerHTML = shown.map((r) =>
+    "<tr>" +
+      '<td class="proj"><a href="' + projectHref(r) + '">' + esc(r.project) + "</a>" +
+        (r.pinned_as ? ' <span class="pin-tag" title="ติดตามใกล้ชิด ทุกชั่วโมง">ติดตาม</span>' : "") +
+        '<span class="sm-only proj-sub">' + thDistrict(r.district) + " · เริ่ม " + bahtShort(r.min_price) + "</span></td>" +
+      '<td class="hide-sm">' + thDistrict(r.district) + "</td>" +
+      '<td class="num">' + fmt(r.listings) + "</td>" +
+      '<td class="num hide-sm">' + bahtShort(r.min_price) + "</td>" +
+      '<td class="num hide-sm">' + bahtShort(r.median_price) + "</td>" +
+      '<td class="num">' + (r.median_ppsqm ? fmt(r.median_ppsqm) : "—") + "</td>" +
+      '<td class="num">' + deltaSpan(r.vs, 0) + "</td>" +
+    "</tr>"
+  ).join("");
+  const more = $("#projects-more");
+  more.hidden = sorted.length <= state.marketShown;
+  more.textContent = "แสดงเพิ่ม (" + fmt(Math.min(PROJECT_PAGE, sorted.length - state.marketShown)) +
+    " จาก " + fmt(sorted.length - state.marketShown) + " ที่เหลือ)";
+}
+
+function renderDistrictSelect() {
+  const m = state.market;
+  const names = Object.keys((m && m.districts) || {}).sort((a, b) => thDistrict(a).localeCompare(thDistrict(b), "th"));
+  $("#district-select").innerHTML = '<option value="">ทุกเขต</option>' +
+    names.map((n) => '<option value="' + esc(n) + '">' + thDistrict(n) + " (" + m.districts[n].projects + ")</option>").join("");
+  $("#district-select").value = state.district;
+}
+
+function renderMarket() {
+  renderMarketHero();
+  renderRoomChips();
+  renderPinned();
+  const hasMarket = !!(state.market && state.market.projects && state.market.projects.length);
+  $$("#view-market > section:not(#pinned-card)").forEach((el) => { el.hidden = !hasMarket; });
+  if (hasMarket) {
+    $("#district-select").value = state.district;
+    $("#budget-select").value = String(state.budget);
+    const rows = marketRows();
+    renderMarketTiles(rows);
+    renderDistricts();
+    renderProjectsTable(rows);
+  }
+  writeHash();
+}
+
+function setDistrict(name) {
+  state.district = name;
+  state.marketShown = PROJECT_PAGE;
+  renderMarket();
+}
+
+/* ------------------------------------------------------------ project view */
+
+function currentEntry() {
+  if (state.projectKind === "pinned") return state.pinned.watches.find((w) => w.id === state.projectId) || {};
+  return (state.market.projects || []).find((p) => p.id === state.projectId) || {};
+}
+
+function districtOfProject() {
+  if (state.projectKind === "universe") return currentEntry().district;
+  const u = state.market && state.market.projects.find((p) => p.pinned_as === state.projectId);
+  return u ? u.district : null;
+}
+
+function renderProjectHero() {
+  const entry = currentEntry();
+  const name = entry.project || state.projectId;
+  const district = districtOfProject();
+  $("#page-title").textContent = name;
+  document.title = name + " · ราคาคอนโด";
+  const crumbMarket = $("#crumb-market");
+  crumbMarket.hidden = false;
+  crumbMarket.href = "#v=market" + (state.room !== "all" ? "&r=" + state.room : "");
+  const crumb = $("#crumb-project");
+  crumb.hidden = !district;
+  crumb.innerHTML = district ? '<a href="#v=market&d=' + encodeURIComponent(district) +
+    (state.room !== "all" ? "&r=" + state.room : "") + '">เขต' + thDistrict(district) + "</a>" : "";
+
+  const updated = state.snapshot && state.snapshot.updated_at;
+  const bits = ["<span>ประกาศขาย " + (((state.snapshot && state.snapshot.listings) || []).length) + " รายการ</span>"];
+  if (updated) bits.push('<span class="live">อัปเดต ' + thDateTime(updated) + "</span>");
+  bits.push(state.projectKind === "pinned"
+    ? '<span class="muted-note">ติดตามใกล้ชิด · DDproperty + Livinginsider · อัปเดตทุกชั่วโมง</span>'
+    : '<span class="muted-note">ข้อมูล DDproperty · อัปเดตวันละครั้ง</span>');
   $("#hero-meta").innerHTML = bits.join("");
 }
 
 function renderRoomChips() {
-  const all = (state.snapshot && state.snapshot.listings) || [];
-  const counts = { all: all.length };
-  all.forEach((r) => { const k = roomOf(r); counts[k] = (counts[k] || 0) + 1; });
+  const counts = { all: 0 };
+  if (state.view === "project") {
+    const all = (state.snapshot && state.snapshot.listings) || [];
+    counts.all = all.length;
+    all.forEach((r) => { const k = roomOf(r); counts[k] = (counts[k] || 0) + 1; });
+  } else if (state.market) {
+    // Market view: how many projects have at least one unit of each type.
+    counts.all = state.market.projects.length;
+    state.market.projects.forEach((p) => Object.keys(p.by_room || {}).forEach((k) => { counts[k] = (counts[k] || 0) + 1; }));
+  }
   $("#room-chips").innerHTML = ROOMS
     .filter((r) => r.key !== "unknown" || counts.unknown)
     .map((r) => {
       const n = counts[r.key] || 0;
       return '<button type="button" class="chip" role="radio" data-room="' + r.key + '" aria-checked="' +
         (state.room === r.key) + '"' + (n || r.key === "all" ? "" : " disabled") + ">" + r.label +
-        '<span class="n">' + n + "</span></button>";
+        '<span class="n">' + fmt(n) + "</span></button>";
     }).join("");
 }
 
@@ -483,11 +797,12 @@ function setupSizeSlider() {
     input.step = 1;
     input.value = state.sqm[i];
   });
-  $("#size-range").closest(".filter").hidden = !areas.length;
+  $("#size-range").closest(".filter").hidden = !areas.length || lo === hi;
   syncSizeUI();
 }
 
 function syncSizeUI() {
+  if (!state.bounds) return;
   const [lo, hi] = state.bounds;
   const span = hi - lo || 1;
   const fill = $("#size-fill");
@@ -514,19 +829,30 @@ function renderTiles(rows) {
     return deltaSpan(pct) + " จาก " + thDate(prior.date);
   };
 
+  // Where the project sits against its district, same room type.
+  let districtLine = "";
+  const district = districtOfProject();
+  if (state.market && district && now.medianPpsqm && !sizeActive()) {
+    const ds = districtStats(district);
+    if (ds && ds.median_ppsqm) {
+      districtLine = deltaSpan((now.medianPpsqm / ds.median_ppsqm - 1) * 100, 0) + " เทียบเขต" + thDistrict(district);
+    }
+  }
+
   const cheapest = rows.filter((r) => r.price).sort((a, b) => a.price - b.price)[0];
   const bestValue = rows.filter((r) => r.price_per_sqm).sort((a, b) => a.price_per_sqm - b.price_per_sqm)[0];
 
   $("#tiles").innerHTML =
     '<div class="tile"><div class="label">ราคากลางต่อ ตร.ม.</div><div class="value">' +
-      baht(now.medianPpsqm) + '</div><div class="sub">' + changeLine(change("median_ppsqm")) + "</div></div>" +
+      baht(now.medianPpsqm) + '</div><div class="sub">' + changeLine(change("median_ppsqm")) +
+      (districtLine ? "<br>" + districtLine : "") + "</div></div>" +
     '<div class="tile"><div class="label">ราคากลาง</div><div class="value">' +
       millions(now.medianPrice) + ' <small>ล้านบาท</small></div><div class="sub">' +
       (now.min ? "ช่วง " + bahtShort(now.min) + " – " + bahtShort(now.max) : "—") + "</div></div>" +
     '<div class="tile"><div class="label">ประกาศขายตอนนี้</div><div class="value">' + now.n +
       ' <small>ห้อง</small></div><div class="sub">' +
       (last && !sizeActive() && prior ? (last.listings - prior.listings >= 0 ? "+" : "") +
-        (last.listings - prior.listings) + " จาก " + thDate(prior.date) : "จาก " + sourceCount(rows) + " เว็บไซต์") +
+        (last.listings - prior.listings) + " จาก " + thDate(prior.date) : "จาก " + new Set(rows.map((r) => r.source)).size + " เว็บไซต์") +
       "</div></div>" +
     '<div class="tile highlight"><div class="label">คุ้มสุดต่อ ตร.ม.</div><div class="value">' +
       (bestValue ? baht(bestValue.price_per_sqm) : "—") + '</div><div class="sub">' +
@@ -535,10 +861,6 @@ function renderTiles(rows) {
       (cheapest && bestValue && cheapest !== bestValue ? "<br>ถูกสุด " + baht(cheapest.price) +
         ' · <a href="' + esc(cheapest.url) + '" target="_blank" rel="noopener">ดู ↗</a>' : "") +
       "</div></div>";
-}
-
-function sourceCount(rows) {
-  return new Set(rows.map((r) => r.source)).size;
 }
 
 function renderTrend() {
@@ -563,7 +885,8 @@ function renderTrend() {
   });
 
   const roomName = (ROOMS.find((r) => r.key === state.room) || ROOMS[0]).label;
-  let cap = "เส้นละ 1 เว็บไซต์ · ห้อง: " + roomName + ". ถ้าสองเส้นใกล้กัน แปลว่าทั้งสองเว็บเห็นตลาดเดียวกัน";
+  let cap = (sources.length > 1 ? "เส้นละ 1 เว็บไซต์ · " : "") + "ห้อง: " + roomName +
+    " · เก็บประวัติเป็นรายวัน";
   if (sizeActive()) cap += " · กราฟนี้ไม่กรองตามขนาด (เก็บประวัติแยกตามจำนวนห้องนอนเท่านั้น)";
   $("#trend-caption").textContent = cap;
 }
@@ -579,14 +902,20 @@ function describeRoomType(rt) {
 }
 
 function renderAlerts() {
-  const entry = state.index.watches.find((w) => w.id === state.projectId) || {};
+  const el = $("#alerts");
+  if (state.projectKind !== "pinned") {
+    $("#alert-scope").textContent = "แจ้งเตือนเปิดเฉพาะโครงการที่ติดตามใกล้ชิด";
+    el.innerHTML = '<li class="empty">โครงการนี้อยู่ในภาพรวมตลาด (อัปเดตวันละครั้ง) ยังไม่ได้ตั้งแจ้งเตือน ' +
+      "ถ้าต้องการติดตามทุกชั่วโมงพร้อมแจ้งเตือนราคาลด ให้เพิ่มโครงการนี้เป็นโครงการที่ติดตามใกล้ชิด</li>";
+    return;
+  }
+  const entry = currentEntry();
   $("#alert-scope").textContent = "ประกาศใหม่และราคาลด · แจ้งเตือนเฉพาะห้อง " +
     describeRoomType(entry.alert_room_type) + " (ส่งเป็น GitHub issue)";
 
   const mine = state.alerts
     .filter((a) => a.watch_id === state.projectId && inRoom(a) && inSize(a))
     .slice(0, 12);
-  const el = $("#alerts");
   if (!mine.length) {
     el.innerHTML = '<li class="empty">ยังไม่มีแจ้งเตือนสำหรับตัวกรองนี้ เมื่อมีประกาศใหม่หรือราคาลดจะแสดงที่นี่</li>';
     return;
@@ -641,12 +970,13 @@ function renderTable(rows, medianPpsqm) {
 
   $("#listing-count").textContent = "(" + sorted.length + ")";
   const body = $("#listings tbody");
+  const more = $("#show-all");
   if (!sorted.length) {
     body.innerHTML = '<tr><td colspan="9" class="empty">ไม่มีประกาศที่ตรงกับตัวกรองนี้ ลองเลือกประเภทห้องอื่นหรือขยายช่วงขนาด</td></tr>';
+    more.hidden = true;
     return;
   }
   const shown = state.showAll ? sorted : sorted.slice(0, TABLE_PAGE);
-  const more = $("#show-all");
   more.hidden = sorted.length <= TABLE_PAGE;
   more.textContent = state.showAll ? "ย่อรายการ" : "แสดงทั้งหมด " + sorted.length + " ประกาศ";
   body.innerHTML = shown.map((r) => {
@@ -655,8 +985,8 @@ function renderTable(rows, medianPpsqm) {
       : '<span class="delta ' + (change < 0 ? "good" : "bad") + '">' + (change < 0 ? "▼ " : "▲ ") +
         bahtShort(Math.abs(change)) + "</span>";
     return "<tr>" +
-      '<td class="num"><a class="price" href="' + esc(r.url) + '" target="_blank" rel="noopener" title="' +
-        esc(r.title) + '">' + baht(r.price) + "</a></td>" +
+      '<td class="num"><a class="price" href="' + esc(r.url) + '" target="_blank" rel="noopener"' +
+        (r.title ? ' title="' + esc(r.title) + '"' : "") + ">" + baht(r.price) + "</a></td>" +
       '<td class="num">' + (r.price_per_sqm ? fmt(r.price_per_sqm) : "—") + "</td>" +
       '<td class="num">' + deltaSpan(vsMedian(r, medianPpsqm)) + "</td>" +
       '<td class="num">' + (r.area_sqm != null ? sqmFmt(r.area_sqm) + " ตร.ม." : "—") + "</td>" +
@@ -670,16 +1000,14 @@ function renderTable(rows, medianPpsqm) {
   }).join("");
 }
 
-/* ------------------------------------------------------------------ wiring */
-
-function render() {
+function renderProject() {
   const rows = currentListings();
   const med = summary(rows).medianPpsqm;
+  renderProjectHero();
   renderRoomChips();
   syncSizeUI();
   renderTiles(rows);
-  const srcKeys = Array.from(new Set(rows.map((r) => r.source))).sort();
-  renderLegend($("#legend-scatter"), srcKeys);
+  renderLegend($("#legend-scatter"), Array.from(new Set(rows.map((r) => r.source))).sort());
   drawScatter($("#chart-scatter"), rows, med);
   renderTrend();
   renderAlerts();
@@ -687,19 +1015,82 @@ function render() {
   writeHash();
 }
 
-async function loadProject(id) {
-  state.projectId = id;
-  const [history, snapshot] = await Promise.all([
-    getJSON("data/history/" + id + ".json", { points: [] }),
-    getJSON("data/snapshots/" + id + ".json", { listings: [], sources: [] }),
-  ]);
-  state.history = history;
-  state.snapshot = snapshot;
-  $("#project-select").value = id;
-  renderHero();
-  setupSizeSlider();
-  renderSources();
-  render();
+/* ------------------------------------------------------------------ wiring */
+
+function setView(view) {
+  state.view = view;
+  $("#view-market").hidden = view !== "market";
+  $("#view-project").hidden = view !== "project";
+  $$(".market-only").forEach((el) => { el.hidden = view !== "market" || !state.market; });
+  $$(".project-only").forEach((el) => { el.hidden = view !== "project"; });
+  $("#search").placeholder = view === "market" ? "กรองตามชื่อ หรือเลือกเพื่อเปิด…" : "ไปยังโครงการอื่น…";
+}
+
+function render() {
+  if (state.view === "market") renderMarket();
+  else if (state.snapshot) renderProject();
+}
+
+async function openProject(id, hash) {
+  const pinned = ((state.pinned && state.pinned.watches) || []).find((w) => w.id === id);
+  const uni = !pinned && state.market ? state.market.projects.find((p) => p.id === id) : null;
+  if (!pinned && !uni) {
+    location.hash = "#v=market";
+    return;
+  }
+  if (id !== state.projectId) {
+    const root = pinned ? "data/" : "data/universe/";
+    const [hist, snap] = await Promise.all([
+      getJSON(root + "history/" + id + ".json", { points: [] }),
+      getJSON(root + "snapshots/" + id + ".json", { listings: [], sources: [] }),
+    ]);
+    state.projectId = id;
+    state.projectKind = pinned ? "pinned" : "universe";
+    state.history = hist;
+    state.snapshot = snap;
+    state.showAll = false;
+    state.sqm = hash.s;
+    setupSizeSlider();
+    renderSources();
+    window.scrollTo(0, 0);
+  }
+  $("#search").value = "";
+  setView("project");
+  renderProject();
+}
+
+function route() {
+  const h = readHash();
+  state.room = h.r && ROOMS.some((r) => r.key === h.r) ? h.r : "all";
+  if (h.p) {
+    openProject(h.p, h);
+    return;
+  }
+  const wasProject = state.view === "project";
+  state.district = h.d;
+  state.budget = h.b;
+  state.marketShown = PROJECT_PAGE;
+  setView("market");
+  renderMarket();
+  if (wasProject) window.scrollTo(0, 0);
+}
+
+function fillDatalist() {
+  const opts = [];
+  ((state.pinned && state.pinned.watches) || []).forEach((w) => opts.push([w.project, "ติดตามใกล้ชิด"]));
+  ((state.market && state.market.projects) || []).forEach((p) => {
+    if (!p.pinned_as) opts.push([p.project, thDistrict(p.district) + " · " + p.listings + " ประกาศ"]);
+  });
+  $("#project-list").innerHTML = opts.map(([v, l]) => '<option value="' + esc(v) + '" label="' + esc(l) + '"></option>').join("");
+}
+
+function findProjectByName(name) {
+  const n = name.trim().toLowerCase();
+  if (!n) return null;
+  const w = ((state.pinned && state.pinned.watches) || []).find((x) => x.project.toLowerCase() === n);
+  if (w) return w.id;
+  const p = ((state.market && state.market.projects) || []).find((x) => x.project.toLowerCase() === n);
+  return p ? p.pinned_as || p.id : null;
 }
 
 function effectiveTheme() {
@@ -715,39 +1106,75 @@ function syncThemeButton() {
 }
 
 function syncRangeSeg() {
-  document.querySelectorAll("#range-seg button").forEach((b) =>
-    b.setAttribute("aria-checked", String(Number(b.dataset.days) === state.days)));
+  $$("#range-seg button").forEach((b) => b.setAttribute("aria-checked", String(Number(b.dataset.days) === state.days)));
 }
 
 async function init() {
   syncThemeButton();
   syncRangeSeg();
 
-  state.index = await getJSON("data/watches.json", null);
-  if (!state.index || !state.index.watches || !state.index.watches.length) {
-    $("#project-name").textContent = "ยังไม่มีข้อมูล";
-    $("#main").innerHTML = '<p class="empty">รัน <code>python -m scraper.main</code> ' +
-      "(หรือรอรอบอัตโนมัติ) เพื่อสร้างข้อมูลใน <code>data/</code></p>";
+  const [pinned, market, alerts] = await Promise.all([
+    getJSON("data/watches.json", null),
+    getJSON("data/universe/index.json", null),
+    getJSON("data/alerts.json", { alerts: [] }),
+  ]);
+  state.pinned = pinned;
+  state.market = market && market.projects && market.projects.length ? market : null;
+  state.alerts = alerts.alerts || [];
+
+  if (!state.pinned && !state.market) {
+    $("#page-title").textContent = "ยังไม่มีข้อมูล";
+    $("#view-market").hidden = false;
+    $("#view-market").innerHTML = '<p class="empty">รัน <code>python -m scraper.main</code> และ ' +
+      "<code>python -m scraper.universe</code> (หรือรอรอบอัตโนมัติ) เพื่อสร้างข้อมูลใน <code>data/</code></p>";
     return;
   }
-  const alertData = await getJSON("data/alerts.json", { alerts: [] });
-  state.alerts = alertData.alerts || [];
 
-  const select = $("#project-select");
-  select.innerHTML = state.index.watches.map((w) =>
-    '<option value="' + esc(w.id) + '">' + esc(w.project) + "</option>").join("");
-  select.disabled = state.index.watches.length < 2;
-  select.addEventListener("change", () => {
-    state.room = "all";
-    state.sqm = null;
-    loadProject(select.value);
-  });
+  if (state.market) renderDistrictSelect();
+  fillDatalist();
 
   $("#room-chips").addEventListener("click", (ev) => {
     const btn = ev.target.closest("button[data-room]");
     if (!btn || btn.disabled) return;
     state.room = btn.dataset.room;
+    state.marketShown = PROJECT_PAGE;
     render();
+  });
+
+  $("#district-select").addEventListener("change", (ev) => setDistrict(ev.target.value));
+  $("#budget-select").addEventListener("change", (ev) => {
+    state.budget = Number(ev.target.value);
+    state.marketShown = PROJECT_PAGE;
+    renderMarket();
+  });
+  $("#districts-more").addEventListener("click", () => {
+    state.allDistricts = !state.allDistricts;
+    renderDistricts();
+  });
+  $("#projects-more").addEventListener("click", () => {
+    state.marketShown += PROJECT_PAGE;
+    renderProjectsTable(marketRows());
+  });
+
+  // Search: an exact name from the list opens that project; anything else
+  // filters the market table as you type.
+  $("#search").addEventListener("input", (ev) => {
+    const id = findProjectByName(ev.target.value);
+    if (id && (ev.inputType === "insertReplacementText" || ev.inputType == null || state.view === "project")) {
+      location.hash = "#p=" + encodeURIComponent(id) + (state.room !== "all" ? "&r=" + state.room : "");
+      return;
+    }
+    if (state.view === "market" && state.market) {
+      state.marketShown = PROJECT_PAGE;
+      const rows = marketRows();
+      renderMarketTiles(rows);
+      renderProjectsTable(rows);
+    }
+  });
+  $("#search").addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter") return;
+    const id = findProjectByName(ev.target.value);
+    if (id) location.hash = "#p=" + encodeURIComponent(id);
   });
 
   const onSlide = (which) => (ev) => {
@@ -760,12 +1187,12 @@ async function init() {
   $("#size-min").addEventListener("input", onSlide(0));
   $("#size-max").addEventListener("input", onSlide(1));
   // Redraw on release rather than on every pixel of drag.
-  ["#size-min", "#size-max"].forEach((s) => $(s).addEventListener("change", render));
+  ["#size-min", "#size-max"].forEach((s) => $(s).addEventListener("change", renderProject));
   $("#size-reset").addEventListener("click", () => {
     state.sqm = state.bounds.slice();
     $("#size-min").value = state.sqm[0];
     $("#size-max").value = state.sqm[1];
-    render();
+    renderProject();
   });
 
   $("#range-seg").addEventListener("click", (ev) => {
@@ -782,24 +1209,36 @@ async function init() {
     document.documentElement.setAttribute("data-theme", next);
     try { localStorage.setItem("theme", next); } catch (e) { /* private mode: this visit only */ }
     syncThemeButton();
-    if (state.snapshot) render();
+    render();
   });
   if (window.matchMedia) {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
       syncThemeButton();
-      if (state.snapshot) render();
+      render();
     });
   }
 
-  document.querySelectorAll("#listings th[data-sort]").forEach((th) => {
+  $$("#listings th[data-sort]").forEach((th) => {
     th.addEventListener("click", () => {
       const key = th.dataset.sort;
       state.dir = state.sort === key ? -state.dir : 1;
       state.sort = key;
-      document.querySelectorAll("#listings th").forEach((h) => h.removeAttribute("aria-sort"));
+      $$("#listings th").forEach((h) => h.removeAttribute("aria-sort"));
       th.setAttribute("aria-sort", state.dir === 1 ? "ascending" : "descending");
       const rows = currentListings();
       renderTable(rows, summary(rows).medianPpsqm);
+    });
+  });
+  $$("#projects th[data-sort]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.sort;
+      // Text columns start A→Z, numbers start high→low except price-like ones.
+      const firstDir = ["project", "district", "min_price", "median_price", "median_ppsqm", "vs"].includes(key) ? 1 : -1;
+      state.marketDir = state.marketSort === key ? -state.marketDir : firstDir;
+      state.marketSort = key;
+      $$("#projects th").forEach((h) => h.removeAttribute("aria-sort"));
+      th.setAttribute("aria-sort", state.marketDir === 1 ? "ascending" : "descending");
+      renderProjectsTable(marketRows());
     });
   });
 
@@ -812,15 +1251,11 @@ async function init() {
   let resizeTimer;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { if (state.snapshot) render(); }, 150);
+    resizeTimer = setTimeout(render, 150);
   });
 
-  // Restore a shared link: #p=<project>&r=<room>&s=<min>-<max>
-  const h = readHash();
-  const known = state.index.watches.some((w) => w.id === h.p);
-  if (h.r && ROOMS.some((r) => r.key === h.r)) state.room = h.r;
-  if (h.s) state.sqm = h.s;
-  await loadProject(known ? h.p : state.index.watches[0].id);
+  window.addEventListener("hashchange", route);
+  route();
 }
 
 init();

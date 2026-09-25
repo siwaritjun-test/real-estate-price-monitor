@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-09-24T23:53:51+00:00",
+ "generated_at": "2026-09-25T04:58:24+00:00",
  "watches": [
   {
    "id": "ideo-mobi-sukhumvit-eastgate",
@@ -33,7 +33,7 @@
      "source": "livinginsider",
      "status": "ok",
      "detail": "",
-     "pages_fetched": 46,
+     "pages_fetched": 45,
      "listings_found": 35
     },
     {

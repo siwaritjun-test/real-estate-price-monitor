@@ -1,6 +1,6 @@
 {
  "watch_id": "ideo-mobi-sukhumvit-eastgate",
- "updated_at": "2026-10-01T13:14:10+00:00",
+ "updated_at": "2026-10-01T18:54:23+00:00",
  "project": "Ideo Mobi Sukhumvit Eastgate",
  "room_type": "any unit",
  "deal": "sale",
@@ -1499,7 +1499,7 @@
    "room": "1br",
    "first_seen": "2026-10-01",
    "first_price": 5600000,
-   "previous_price": null,
+   "previous_price": 5600000,
    "price_changes": [],
    "last_seen": "2026-10-01"
   },
@@ -1521,7 +1521,7 @@
    "room": "2br",
    "first_seen": "2026-09-24",
    "first_price": 7390000,
-   "previous_price": 7390000,
+   "previous_price": 7490000,
    "price_changes": [
     {
      "date": "2026-10-01",

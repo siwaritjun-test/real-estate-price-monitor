@@ -936,6 +936,84 @@
      }
     }
    }
+  },
+  {
+   "date": "2026-10-06",
+   "listings": 64,
+   "priced_listings": 64,
+   "median_price": 2800000.0,
+   "median_ppsqm": 102916.5,
+   "min_price": 1890000,
+   "max_price": 7490000,
+   "by_source": {
+    "ddproperty": {
+     "listings": 29,
+     "median_price": 2790000,
+     "median_ppsqm": 101613
+    },
+    "livinginsider": {
+     "listings": 35,
+     "median_price": 2800000,
+     "median_ppsqm": 104545
+    }
+   },
+   "by_room": {
+    "studio": {
+     "listings": 19,
+     "priced_listings": 19,
+     "median_price": 2350000,
+     "median_ppsqm": 106818,
+     "min_price": 1890000,
+     "max_price": 3200000,
+     "by_source": {
+      "ddproperty": {
+       "listings": 7,
+       "median_price": 2300000,
+       "median_ppsqm": 104545
+      },
+      "livinginsider": {
+       "listings": 12,
+       "median_price": 2375000.0,
+       "median_ppsqm": 107954.5
+      }
+     }
+    },
+    "1br": {
+     "listings": 43,
+     "priced_listings": 43,
+     "median_price": 2900000,
+     "median_ppsqm": 99615,
+     "min_price": 1950000,
+     "max_price": 5600000,
+     "by_source": {
+      "ddproperty": {
+       "listings": 20,
+       "median_price": 2895000.0,
+       "median_ppsqm": 100614.0
+      },
+      "livinginsider": {
+       "listings": 23,
+       "median_price": 2970000,
+       "median_ppsqm": 99000
+      }
+     }
+    },
+    "2br": {
+     "listings": 2,
+     "priced_listings": 2,
+     "median_price": 6495000.0,
+     "median_ppsqm": 109639.0,
+     "min_price": 5500000,
+     "max_price": 7490000,
+     "by_source": {
+      "ddproperty": {
+       "listings": 2,
+       "median_price": 6495000.0,
+       "median_ppsqm": 109639.0
+      }
+     }
+    }
+   }
   }
  ]
 }

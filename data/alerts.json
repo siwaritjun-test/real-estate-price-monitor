@@ -1,6 +1,23 @@
 {
- "generated_at": "2026-10-14T10:12:59+00:00",
+ "generated_at": "2026-10-14T15:09:32+00:00",
  "alerts": [
+  {
+   "watch_id": "ideo-mobi-sukhumvit-eastgate",
+   "project": "Ideo Mobi Sukhumvit Eastgate",
+   "room": "1br",
+   "room_type": "1 bed, 23 sqm",
+   "source": "ddproperty",
+   "listing_id": "500643743",
+   "title": "IDEO MOBI Sukhumvit Eastgate, Bangkok",
+   "url": "https://www.ddproperty.com/en/property/ideo-mobi-sukhumvit-eastgate-bangkok-for-sale-500643743",
+   "area_sqm": 23.0,
+   "bedrooms": 1,
+   "date": "2026-10-14",
+   "detected_at": "2026-10-14T15:09:32+00:00",
+   "type": "new_listing",
+   "price": 2450000,
+   "price_per_sqm": 106522
+  },
   {
    "watch_id": "ideo-mobi-sukhumvit-eastgate",
    "project": "Ideo Mobi Sukhumvit Eastgate",

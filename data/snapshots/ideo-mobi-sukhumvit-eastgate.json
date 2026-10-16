@@ -1,6 +1,6 @@
 {
  "watch_id": "ideo-mobi-sukhumvit-eastgate",
- "updated_at": "2026-10-16T01:20:23+00:00",
+ "updated_at": "2026-10-16T07:09:20+00:00",
  "project": "Ideo Mobi Sukhumvit Eastgate",
  "room_type": "any unit",
  "deal": "sale",
@@ -10,7 +10,7 @@
    "status": "ok",
    "detail": "",
    "pages_fetched": 2,
-   "listings_found": 30
+   "listings_found": 31
   },
   {
    "source": "livinginsider",
@@ -1390,6 +1390,28 @@
    "first_seen": "2026-09-24",
    "first_price": 4269795,
    "previous_price": 4269795,
+   "price_changes": [],
+   "last_seen": "2026-10-16"
+  },
+  {
+   "source": "ddproperty",
+   "listing_id": "500652289",
+   "url": "https://www.ddproperty.com/en/property/ideo-mobi-sukhumvit-eastgate-bangkok-for-sale-500652289",
+   "title": "IDEO MOBI Sukhumvit Eastgate, Bangkok",
+   "deal": "sale",
+   "price": 4558500,
+   "area_sqm": 30.0,
+   "bedrooms": 1,
+   "bathrooms": 1,
+   "floor": null,
+   "address": "4371 Sukhumvit Road, Bang Na, Bangkok",
+   "posted_on": "2026-10-16",
+   "key": "ddproperty:500652289",
+   "price_per_sqm": 151950,
+   "room": "1br",
+   "first_seen": "2026-10-16",
+   "first_price": 4558500,
+   "previous_price": null,
    "price_changes": [],
    "last_seen": "2026-10-16"
   },

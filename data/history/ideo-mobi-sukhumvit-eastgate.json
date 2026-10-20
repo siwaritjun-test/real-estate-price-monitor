@@ -2031,18 +2031,13 @@
   },
   {
    "date": "2026-10-20",
-   "listings": 64,
-   "priced_listings": 64,
-   "median_price": 2800000.0,
-   "median_ppsqm": 103939.0,
+   "listings": 35,
+   "priced_listings": 35,
+   "median_price": 2800000,
+   "median_ppsqm": 104545,
    "min_price": 1890000,
-   "max_price": 7490000,
+   "max_price": 4269795,
    "by_source": {
-    "ddproperty": {
-     "listings": 29,
-     "median_price": 2790000,
-     "median_ppsqm": 103333
-    },
     "livinginsider": {
      "listings": 35,
      "median_price": 2800000,
@@ -2051,18 +2046,13 @@
    },
    "by_room": {
     "studio": {
-     "listings": 18,
-     "priced_listings": 18,
-     "median_price": 2325000.0,
-     "median_ppsqm": 105681.5,
+     "listings": 12,
+     "priced_listings": 12,
+     "median_price": 2375000.0,
+     "median_ppsqm": 107954.5,
      "min_price": 1890000,
      "max_price": 3200000,
      "by_source": {
-      "ddproperty": {
-       "listings": 6,
-       "median_price": 2184000.0,
-       "median_ppsqm": 99653.5
-      },
       "livinginsider": {
        "listings": 12,
        "median_price": 2375000.0,
@@ -2071,37 +2061,17 @@
      }
     },
     "1br": {
-     "listings": 44,
-     "priced_listings": 44,
-     "median_price": 2975000.0,
-     "median_ppsqm": 102386.5,
+     "listings": 23,
+     "priced_listings": 23,
+     "median_price": 2970000,
+     "median_ppsqm": 99000,
      "min_price": 1950000,
-     "max_price": 5600000,
+     "max_price": 4269795,
      "by_source": {
-      "ddproperty": {
-       "listings": 21,
-       "median_price": 3100000,
-       "median_ppsqm": 103333
-      },
       "livinginsider": {
        "listings": 23,
        "median_price": 2970000,
        "median_ppsqm": 99000
-      }
-     }
-    },
-    "2br": {
-     "listings": 2,
-     "priced_listings": 2,
-     "median_price": 6495000.0,
-     "median_ppsqm": 109639.0,
-     "min_price": 5500000,
-     "max_price": 7490000,
-     "by_source": {
-      "ddproperty": {
-       "listings": 2,
-       "median_price": 6495000.0,
-       "median_ppsqm": 109639.0
       }
      }
     }

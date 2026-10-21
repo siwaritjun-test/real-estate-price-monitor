@@ -1,17 +1,17 @@
 {
- "generated_at": "2026-10-21T13:48:34+00:00",
+ "generated_at": "2026-10-21T18:39:17+00:00",
  "watches": [
   {
    "id": "ideo-mobi-sukhumvit-eastgate",
    "project": "Ideo Mobi Sukhumvit Eastgate",
    "room_type": "any unit",
    "deal": "sale",
-   "listings": 63,
-   "median_price": 2790000,
-   "median_ppsqm": 103333,
+   "listings": 62,
+   "median_price": 2788000.0,
+   "median_ppsqm": 103333.0,
    "rooms": {
     "studio": 19,
-    "1br": 42,
+    "1br": 41,
     "2br": 2
    },
    "alert_room_type": {
@@ -27,7 +27,7 @@
      "status": "ok",
      "detail": "",
      "pages_fetched": 2,
-     "listings_found": 28
+     "listings_found": 27
     },
     {
      "source": "livinginsider",

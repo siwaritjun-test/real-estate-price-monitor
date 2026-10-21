@@ -1,6 +1,6 @@
 {
  "watch_id": "ideo-mobi-sukhumvit-eastgate",
- "updated_at": "2026-10-21T01:35:43+00:00",
+ "updated_at": "2026-10-21T07:39:30+00:00",
  "project": "Ideo Mobi Sukhumvit Eastgate",
  "room_type": "any unit",
  "deal": "sale",
@@ -10,7 +10,7 @@
    "status": "ok",
    "detail": "",
    "pages_fetched": 2,
-   "listings_found": 27
+   "listings_found": 28
   },
   {
    "source": "livinginsider",
@@ -91,7 +91,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 1950000,
-   "previous_price": null,
+   "previous_price": 1950000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -113,7 +113,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 1950000,
-   "previous_price": null,
+   "previous_price": 1950000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -157,7 +157,7 @@
    "room": "studio",
    "first_seen": "2026-10-21",
    "first_price": 1990000,
-   "previous_price": null,
+   "previous_price": 1990000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -179,7 +179,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 1990000,
-   "previous_price": null,
+   "previous_price": 1990000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -201,7 +201,7 @@
    "room": "studio",
    "first_seen": "2026-10-21",
    "first_price": 1990000,
-   "previous_price": null,
+   "previous_price": 1990000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -267,7 +267,7 @@
    "room": "studio",
    "first_seen": "2026-10-21",
    "first_price": 2068000,
-   "previous_price": null,
+   "previous_price": 2068000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -289,7 +289,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 2150000,
-   "previous_price": null,
+   "previous_price": 2150000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -333,7 +333,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 2190000,
-   "previous_price": null,
+   "previous_price": 2190000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -399,7 +399,7 @@
    "room": "studio",
    "first_seen": "2026-10-21",
    "first_price": 2300000,
-   "previous_price": null,
+   "previous_price": 2300000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -487,6 +487,28 @@
    "room": "studio",
    "first_seen": "2026-10-21",
    "first_price": 2365000,
+   "previous_price": 2365000,
+   "price_changes": [],
+   "last_seen": "2026-10-21"
+  },
+  {
+   "source": "ddproperty",
+   "listing_id": "60202076",
+   "url": "https://www.ddproperty.com/en/property/ideo-mobi-sukhumvit-eastgate-bangkok-for-sale-60202076",
+   "title": "IDEO MOBI Sukhumvit Eastgate, Bangkok",
+   "deal": "sale",
+   "price": 2390000,
+   "area_sqm": 22.0,
+   "bedrooms": 0,
+   "bathrooms": 1,
+   "floor": null,
+   "address": "4371 Sukhumvit Road, Bang Na, Bangkok",
+   "posted_on": "2026-10-21",
+   "key": "ddproperty:60202076",
+   "price_per_sqm": 108636,
+   "room": "studio",
+   "first_seen": "2026-10-21",
+   "first_price": 2390000,
    "previous_price": null,
    "price_changes": [],
    "last_seen": "2026-10-21"
@@ -509,7 +531,7 @@
    "room": "studio",
    "first_seen": "2026-10-21",
    "first_price": 2400000,
-   "previous_price": null,
+   "previous_price": 2400000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -575,7 +597,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 2450000,
-   "previous_price": null,
+   "previous_price": 2450000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -597,7 +619,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 2590000,
-   "previous_price": null,
+   "previous_price": 2590000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -663,7 +685,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 2786000,
-   "previous_price": null,
+   "previous_price": 2786000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -707,7 +729,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 2790000,
-   "previous_price": null,
+   "previous_price": 2790000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -817,7 +839,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 2900000,
-   "previous_price": null,
+   "previous_price": 2900000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -927,7 +949,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 3100000,
-   "previous_price": null,
+   "previous_price": 3100000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -971,7 +993,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 3150000,
-   "previous_price": null,
+   "previous_price": 3150000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -1015,7 +1037,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 3200000,
-   "previous_price": null,
+   "previous_price": 3200000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -1169,7 +1191,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 3790000,
-   "previous_price": null,
+   "previous_price": 3790000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -1213,7 +1235,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 3867500,
-   "previous_price": null,
+   "previous_price": 3867500,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -1235,7 +1257,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 3900000,
-   "previous_price": null,
+   "previous_price": 3900000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -1257,7 +1279,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 4100000,
-   "previous_price": null,
+   "previous_price": 4100000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -1323,7 +1345,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 4558500,
-   "previous_price": null,
+   "previous_price": 4558500,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -1345,7 +1367,7 @@
    "room": "2br",
    "first_seen": "2026-10-21",
    "first_price": 5500000,
-   "previous_price": null,
+   "previous_price": 5500000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -1367,7 +1389,7 @@
    "room": "1br",
    "first_seen": "2026-10-21",
    "first_price": 5600000,
-   "previous_price": null,
+   "previous_price": 5600000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   },
@@ -1389,7 +1411,7 @@
    "room": "2br",
    "first_seen": "2026-10-21",
    "first_price": 7490000,
-   "previous_price": null,
+   "previous_price": 7490000,
    "price_changes": [],
    "last_seen": "2026-10-21"
   }

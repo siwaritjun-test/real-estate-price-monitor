@@ -2159,15 +2159,15 @@
    "date": "2026-10-22",
    "listings": 62,
    "priced_listings": 62,
-   "median_price": 2788000.0,
-   "median_ppsqm": 103333.0,
+   "median_price": 2795000.0,
+   "median_ppsqm": 103939.0,
    "min_price": 1890000,
    "max_price": 7490000,
    "by_source": {
     "ddproperty": {
      "listings": 27,
-     "median_price": 2590000,
-     "median_ppsqm": 102500
+     "median_price": 2786000,
+     "median_ppsqm": 103333
     },
     "livinginsider": {
      "listings": 35,
@@ -2199,15 +2199,15 @@
     "1br": {
      "listings": 41,
      "priced_listings": 41,
-     "median_price": 2900000,
-     "median_ppsqm": 101613,
+     "median_price": 2970000,
+     "median_ppsqm": 102273,
      "min_price": 1950000,
      "max_price": 5600000,
      "by_source": {
       "ddproperty": {
        "listings": 18,
-       "median_price": 2845000.0,
-       "median_ppsqm": 102056.5
+       "median_price": 3000000.0,
+       "median_ppsqm": 102916.5
       },
       "livinginsider": {
        "listings": 23,

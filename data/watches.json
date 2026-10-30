@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-10-29T20:17:40+00:00",
+ "generated_at": "2026-10-30T00:59:00+00:00",
  "watches": [
   {
    "id": "ideo-mobi-sukhumvit-eastgate",
@@ -24,10 +24,10 @@
    "sources": [
     {
      "source": "ddproperty",
-     "status": "ok",
-     "detail": "",
-     "pages_fetched": 2,
-     "listings_found": 23
+     "status": "error",
+     "detail": "HTTP 403 for https://www.ddproperty.com/en/property-for-sale?freetext=Ideo+Mobi+Sukhumvit+Eastgate",
+     "pages_fetched": 0,
+     "listings_found": 0
     },
     {
      "source": "livinginsider",
